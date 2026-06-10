@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-
 const userSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -11,7 +10,7 @@ const userSchema = new mongoose.Schema({
         lowercase: true,
         match: [/\S+@\S+\.\S+/, "Please use a valid email address"]
     },
-    name:{
+    name: {
         type: String,
         required: [true, "Name is required"],
         trim: true
@@ -22,33 +21,33 @@ const userSchema = new mongoose.Schema({
         minlength: [6, "Password must be at least 6 characters long"],
         select: false // Do not return password by default when querying user
     },
-    systemUser:{
-        type: Boolean,
-        default: false,
-        immutable: true,
-        select: false
+    role: {
+        type: String,
+        enum: {
+            values: ['customer', 'admin', 'system'],
+            message: 'Role must be customer, admin, or system'
+        },
+        default: 'customer'
     }
- }, {
-        timestamps: true
-    })
+}, {
+    timestamps: true
+});
 
-
-// when user is created or password is modified, hash the password before saving to database
-userSchema.pre('save', async function(){
-    if(!this.isModified('password')){
+// Hash password before saving
+userSchema.pre('save', async function () {
+    if (!this.isModified('password')) {
         return;
     }
-   const hash= await bcrypt.hash(this.password, 10);
-   this.password=hash;
+    const hash = await bcrypt.hash(this.password, 10);
+    this.password = hash;
+    return;
+});
 
-   return;
-   
-})
-
-userSchema.methods.comparePassword= async function(password){
+// Compare password for login
+userSchema.methods.comparePassword = async function (password) {
     return await bcrypt.compare(password, this.password);
-}
+};
 
-const UserModel= mongoose.model('User', userSchema);
+const UserModel = mongoose.model('User', userSchema);
 
-module.exports=UserModel;
+module.exports = UserModel;

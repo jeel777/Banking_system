@@ -1,131 +1,121 @@
 const userModel = require('../models/user.model');
 const jwt = require('jsonwebtoken');
-const cookieparser = require('cookie-parser');
 const { sendRegistrationEmail } = require('../services/email');
-const nodemailer = require('nodemailer');
 const tokenBlacklistModel = require('../models/blacklist.model');
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/AppError');
 
 // POST /api/auth/register
-async function userRegisterController(req, res) {
+const userRegisterController = catchAsync(async (req, res, next) => {
     const { email, name, password } = req.body;
 
     const isUserExist = await userModel.findOne({ email: email });
 
     if (isUserExist) {
-        return res.status(400).json({
-            success: false,
-            message: "User already exists with this email"
-        });
+        throw new AppError("User already exists with this email", 400);
     }
 
-    // if user does not exist then create new user
-    const newUser = new userModel({
-        name,
-        email,
-        password
-    });
+    // If user does not exist, create new user
+    const newUser = new userModel({ name, email, password });
 
-    // now we have to create jwt token for the user
-
+    // Create JWT token for the user
     const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, { expiresIn: "10d" });
 
-    // set token in cookie
+    // Set token in cookie
     res.cookie("token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // set secure flag in production
-        sameSite: "strict", // to prevent CSRF attacks
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
         maxAge: 10 * 24 * 60 * 60 * 1000 // 10 days
     });
-
 
     await newUser.save();
 
     res.status(201).json({
         success: true,
         message: "User registered successfully",
-        user: { // user data to frontend 
+        user: {
             name: newUser.name,
             email: newUser.email
         }
-
-
     });
-    await sendRegistrationEmail(newUser.email, newUser.name)
 
-}
+    // Send welcome email (non-blocking, don't await in response path)
+    sendRegistrationEmail(newUser.email, newUser.name).catch(() => {});
+});
 
-async function userLoginController(req, res) {
+// POST /api/auth/login
+const userLoginController = catchAsync(async (req, res, next) => {
     const { email, password } = req.body;
 
-    const user = await userModel.findOne({ email: email }).select("+password"); // we have to select password explicitly because in user model we have set select: false for password field to not return password by default when querying user
-
+    const user = await userModel.findOne({ email: email }).select("+password");
 
     if (!user) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid email or password"
-        });
+        throw new AppError("Invalid email or password", 400);
     }
 
     const isPasswordMatch = await user.comparePassword(password);
 
     if (!isPasswordMatch) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid email or password"
-        });
+        throw new AppError("Invalid email or password", 400);
     }
 
-    // if email and password are correct then create jwt token for the user
-
+    // Create JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "10d" });
 
-    // set token in cookie
+    // Set token in cookie
     res.cookie("token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // set secure flag in production
-        sameSite: "strict", // to prevent CSRF attacks
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
         maxAge: 10 * 24 * 60 * 60 * 1000 // 10 days
     });
 
     res.status(200).json({
         success: true,
         message: "User logged in successfully",
-        user: { // user data to frontend 
+        user: {
             name: user.name,
             email: user.email
         }
     });
-}
+});
 
-async function userLogoutController(req, res) {
-
-    // we want token to blacklist is 
-
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[1]; // we will get token from cookie or from authorization header
+// POST /api/auth/logout
+const userLogoutController = catchAsync(async (req, res, next) => {
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
-        return res.status(400).json({
-            success: false,
-            message: "Token is required for logout"
-        });
+        throw new AppError("Token is required for logout", 400);
     }
 
-    res.clearCookie("token"); // clear token from cookie
+    res.clearCookie("token");
 
-    // add token to blacklist
+    // Add token to blacklist
     await tokenBlacklistModel.create({ token });
 
     return res.status(200).json({
         success: true,
         message: "User logged out successfully"
     });
+});
 
-
-}
+// GET /api/auth/me — Get current logged-in user
+const getMeController = catchAsync(async (req, res, next) => {
+    return res.status(200).json({
+        success: true,
+        user: {
+            _id: req.user._id,
+            name: req.user.name,
+            email: req.user.email,
+            role: req.user.role
+        }
+    });
+});
 
 module.exports = {
     userRegisterController,
     userLoginController,
-    userLogoutController
-}
+    userLogoutController,
+    getMeController
+};

@@ -1,52 +1,53 @@
-// will first check if the user is authenticated or not 
 const AccountModel = require('../models/account.model');
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/AppError');
 
-// create account for user
+// POST /api/accounts — Create account for authenticated user
+const createAccount = catchAsync(async (req, res, next) => {
+    const user = req.user;
 
-async function createAccount(req, res) {
+    const account = await AccountModel.create({
+        user: user._id,
+    });
 
-const user=req.user; // we will get user from auth middleware and save it in req.user
-
-const account = await AccountModel.create({
-    user: user._id, 
+    return res.status(201).json({
+        success: true,
+        message: 'Account created successfully',
+        account
+    });
 });
 
-return res.status(201).json({ message: 'Account created successfully', account });
+// GET /api/accounts — Get all accounts of authenticated user
+const getUserAccountsController = catchAsync(async (req, res, next) => {
+    const accounts = await AccountModel.find({ user: req.user._id });
 
+    return res.status(200).json({
+        success: true,
+        count: accounts.length,
+        accounts
+    });
+});
 
+// GET /api/accounts/balance/:accountId — Get balance of a specific account
+const getAccountBalanceController = catchAsync(async (req, res, next) => {
+    const accountId = req.params.accountId;
 
-}
+    const account = await AccountModel.findOne(
+        { _id: accountId, user: req.user._id }
+    );
 
-// get all accounts of user
-async function getUserAccountsController(req, res) {
+    if (!account) {
+        throw new AppError('Account not found or you do not have access to it', 404);
+    }
 
-const accounts = await AccountModel.find({ user: req.user._id });
+    const balance = await account.getBalance();
 
-return res.status(200).json({ accounts });
-
-}
-
-// get balance of account
-async function getAccountBalanceController(req, res) {
-
-const accountId = req.params.accountId;
-
-console.log("Account ID:", accountId);
-console.log("Logged in User:", req.user._id);
-
-const account = await AccountModel.findOne(
-    { _id: accountId, user: req.user._id }       // we will find account by id and user id to make sure that user is trying to access his own account balance and not someone else's account balance
-);
-
-if (!account) {
-    return res.status(404).json({ message: 'Account not found' });
-}
-
-const balance = await account.getBalance(); 
-return res.status(200).json({ balance });
-
-
-
-}
+    return res.status(200).json({
+        success: true,
+        accountId: account._id,
+        currency: account.currency,
+        balance
+    });
+});
 
 module.exports = { createAccount, getUserAccountsController, getAccountBalanceController };

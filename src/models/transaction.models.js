@@ -32,6 +32,15 @@ const transactionSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    fraudAlert: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'FraudAlert',
+        default: null
+    },
+    riskScore: {
+        type: Number,
+        default: 0
+    },
 
 
 

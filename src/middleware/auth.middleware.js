@@ -1,92 +1,82 @@
-// here we will check if the user is authenticated or not before allowing access to certain routes
+// Authentication middleware — verifies JWT tokens and attaches user to req
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/user.model');
 const tokenBlacklistModel = require('../models/blacklist.model');
+const AppError = require('../utils/AppError');
 
-
-
+/**
+ * Standard auth middleware — verifies JWT and attaches user to req.user.
+ * Used for all authenticated routes.
+ */
 async function authMiddleware(req, res, next) {
-
-    const token = req.cookies.token || req.headers['authorization']?.split(' ')[1]; // to get token from cookies or from authorization header
+    const token = req.cookies.token || req.headers['authorization']?.split(' ')[1];
 
     if (!token) {
-        return res.status(401).json({ message: 'Unauthorized1' });
-    }
-
-    const isBlacklisted = await tokenBlacklistModel.findOne({ token
-    });
-
-    if (isBlacklisted) {
-        return res.status(401).json({ message: 'Unauthorized4' });
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET); // to verify the token and get the user id from it
-
-        if (!decoded || !decoded.userId) {
-            return res.status(401).json({ message: 'Unauthorized2' });
-        }
-
-        // if we found token then we will find and save userid 
-        const user = await userModel.findById(decoded.userId);
-        req.user = user; // we will save the user in req.user to access it in the controller
-
-        return next(); // to pass the control to the next middleware or controller
-    } catch (err) {
-        return res.status(401).json({ message: 'Unauthorized3' });
-    }
-
-
-
-}
-
-
-
-async function systemAuthMiddleware(req, res, next) {
-
-
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[1]
-    if (!token) {
-        return res.status(401).json({
-            message: "Unauthorized access, token is missing"
-        })
+        throw new AppError('Authentication required. Please log in.', 401);
     }
 
     const isBlacklisted = await tokenBlacklistModel.findOne({ token });
 
     if (isBlacklisted) {
-        return res.status(401).json({
-            message: "Unauthorized access, token is blacklisted"
-        })
+        throw new AppError('Token has been invalidated. Please log in again.', 401);
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        console.log("Decoded:", decoded);
-
-        const user = await userModel
-            .findById(decoded.userId)
-            .select("+systemUser");
-
-        console.log("Logged in user:", user.email);
-        console.log("System User:", user.systemUser);
-
-
-        if (!user.systemUser) {
-            return res.status(403).json({
-                message: "Forbidden access, not a system user"
-            })
+        if (!decoded || !decoded.userId) {
+            throw new AppError('Invalid token payload.', 401);
         }
 
-        req.user = user
+        const user = await userModel.findById(decoded.userId);
 
-        return next()
+        if (!user) {
+            throw new AppError('User belonging to this token no longer exists.', 401);
+        }
+
+        req.user = user;
+        return next();
+    } catch (err) {
+        if (err.isOperational) throw err; // Re-throw our AppErrors
+        throw new AppError('Invalid or expired token. Please log in again.', 401);
     }
-    catch (err) {
-        return res.status(401).json({
-            message: "Unauthorized access, token is invalid"
-        })
+}
+
+/**
+ * System auth middleware — for system-level operations (initial funds, etc.)
+ * Verifies JWT AND checks that the user has 'system' or 'admin' role.
+ */
+async function systemAuthMiddleware(req, res, next) {
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+        throw new AppError('Authentication required.', 401);
+    }
+
+    const isBlacklisted = await tokenBlacklistModel.findOne({ token });
+
+    if (isBlacklisted) {
+        throw new AppError('Token has been invalidated.', 401);
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        const user = await userModel.findById(decoded.userId);
+
+        if (!user) {
+            throw new AppError('User not found.', 401);
+        }
+
+        if (user.role !== 'system' && user.role !== 'admin') {
+            throw new AppError('Forbidden. System-level access required.', 403);
+        }
+
+        req.user = user;
+        return next();
+    } catch (err) {
+        if (err.isOperational) throw err;
+        throw new AppError('Invalid or expired token.', 401);
     }
 }
 

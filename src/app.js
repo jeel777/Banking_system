@@ -1,28 +1,68 @@
 /*
-app.js has work of 
-1 create server
-2 configure the server
-3 connect to database
-4 define routes
+app.js — Express application setup
+1. Create and configure Express server
+2. Apply global middleware (security, logging, parsing)
+3. Define API routes
+4. Global error handler (must be last)
 */
 
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const helmet = require('helmet');
 
-const express=require('express');
-const cookieParser=require('cookie-parser');
+// Middleware
+const requestLogger = require('./middleware/requestLogger');
+const errorHandler = require('./middleware/errorHandler');
+const { globalLimiter } = require('./middleware/rateLimiter');
 
-const authRoutes=require('./routes/auth.routes.js');
-const accountRoutes=require('./routes/account.routes.js');
-const transactionRoutes=require('./routes/transaction.routes.js');
+// Routes
+const authRoutes = require('./routes/auth.routes.js');
+const accountRoutes = require('./routes/account.routes.js');
+const transactionRoutes = require('./routes/transaction.routes.js');
+const adminRoutes = require('./routes/admin.routes.js');
 
-const app=express();                                    // we will create server here but run in server.js
+const app = express();
 
-app.use(express.json());                                // to parse incoming json data in req.body bec express server can not read json data by default
-app.use(cookieParser());                                // to parse cookies from incoming req headers and set it in req.cookies
+// ─── Security Middleware ──────────────────────────────────
+app.use(helmet());                                          // Set security HTTP headers
+app.use(cors({
+    origin: [process.env.CLIENT_URL || 'http://localhost:3000', 'http://localhost:5173'],
+    credentials: true                                       // Allow cookies to be sent cross-origin
+}));
 
-app.use("/api/auth", authRoutes);                       // all req related to auth will be handled by authRoutes
-app.use("/api/accounts", accountRoutes);                // all req related to accounts will be handled by accountRoutes
-app.use("/api/transactions", transactionRoutes);      
+// ─── Parsing Middleware ───────────────────────────────────
+app.use(express.json({ limit: '10kb' }));                   // Parse JSON bodies (limit to prevent abuse)
+app.use(cookieParser());                                    // Parse cookies from request headers
 
-module.exports=app;
+// ─── Logging Middleware ───────────────────────────────────
+app.use(requestLogger);                                     // Log all HTTP requests via Morgan → Winston
 
-// uV9MazTSUxuBdlS1
+// ─── Rate Limiting ────────────────────────────────────────
+app.use('/api', globalLimiter);                             // 100 requests per 15 min per IP
+
+// ─── API Routes ───────────────────────────────────────────
+app.use("/api/auth", authRoutes);
+app.use("/api/accounts", accountRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/admin", adminRoutes);
+
+// ─── Health Check ─────────────────────────────────────────
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Banking System API is running",
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ─── 404 Handler ──────────────────────────────────────────
+const AppError = require('./utils/AppError');
+app.all('{/*path}', (req, res, next) => {
+    next(new AppError(`Cannot find ${req.method} ${req.originalUrl} on this server`, 404));
+});
+
+// ─── Global Error Handler (must be last) ──────────────────
+app.use(errorHandler);
+
+module.exports = app;
