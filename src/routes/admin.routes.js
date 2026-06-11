@@ -10,7 +10,9 @@ const {
     getSystemLedger,
     getFraudAlerts,
     getFraudStats,
-    reviewFraudAlert
+    reviewFraudAlert,
+    seedFunds,
+    listAllAccounts
 } = require('../controllers/admin.controller');
 
 const router = express.Router();
@@ -23,9 +25,13 @@ router.get('/users', getAllUsers);
 router.get('/users/:id', getUserById);
 
 // Account management
+router.get('/accounts', listAllAccounts);
 router.patch('/accounts/:id/freeze', freezeAccount);
 router.patch('/accounts/:id/unfreeze', unfreezeAccount);
 router.patch('/accounts/:id/close', closeAccount);
+
+// Seed funds
+router.post('/seed-funds', seedFunds);
 
 // System ledger
 router.get('/ledger', getSystemLedger);

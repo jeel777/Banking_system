@@ -1,7 +1,9 @@
 const userModel = require('../models/user.model');
 const accountModel = require('../models/account.model');
 const ledgerModel = require('../models/ledger.model');
+const transactionModel = require('../models/transaction.models');
 const FraudAlert = require('../models/fraudAlert.model');
+const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
@@ -305,6 +307,130 @@ const reviewFraudAlert = catchAsync(async (req, res, next) => {
     });
 });
 
+// POST /api/admin/seed-funds — Admin seeds funds directly into an account
+const seedFunds = catchAsync(async (req, res, next) => {
+    const { toAccount, amount } = req.body;
+
+    if (!toAccount || !amount) {
+        throw new AppError('toAccount and amount are required', 400);
+    }
+
+    if (amount <= 0 || amount > 10000000) {
+        throw new AppError('Amount must be between 1 and 10,000,000', 400);
+    }
+
+    const targetAccount = await accountModel.findById(toAccount).populate('user', 'name email');
+    if (!targetAccount) {
+        throw new AppError('Target account not found', 404);
+    }
+
+    // Find or use system account as the source
+    const systemUser = await userModel.findOne({ role: 'system' });
+    let systemAccount = null;
+    if (systemUser) {
+        systemAccount = await accountModel.findOne({ user: systemUser._id });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const tx = new transactionModel({
+            fromAccount: systemAccount ? systemAccount._id : targetAccount._id,
+            toAccount: targetAccount._id,
+            amount,
+            idempotencyKey: `admin-seed-${toAccount}-${Date.now()}`,
+            status: 'pending'
+        });
+
+        // Debit system account (if exists)
+        if (systemAccount) {
+            await ledgerModel.create([{
+                account: systemAccount._id,
+                amount,
+                transaction: tx._id,
+                type: 'debit'
+            }], { session });
+        }
+
+        // Credit target account
+        await ledgerModel.create([{
+            account: targetAccount._id,
+            amount,
+            transaction: tx._id,
+            type: 'credit'
+        }], { session });
+
+        tx.status = 'completed';
+        await tx.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        const newBalance = await targetAccount.getBalance();
+
+        logger.info(`Admin ${req.user._id} seeded ₹${amount} to account ${toAccount}`);
+
+        return res.status(201).json({
+            success: true,
+            message: `Successfully seeded ₹${amount.toLocaleString('en-IN')} to account`,
+            transaction: tx,
+            recipient: {
+                accountId: targetAccount._id,
+                userName: targetAccount.user?.name,
+                newBalance
+            }
+        });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+    }
+});
+
+// GET /api/admin/accounts — List all accounts with balances
+const listAllAccounts = catchAsync(async (req, res, next) => {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [allAccounts, total] = await Promise.all([
+        accountModel.find()
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .populate('user', 'name email role'),
+        accountModel.countDocuments()
+    ]);
+
+    // Get balances
+    const accountsWithBalance = await Promise.all(
+        allAccounts.map(async (acc) => {
+            const balance = await acc.getBalance();
+            return {
+                _id: acc._id,
+                user: acc.user,
+                status: acc.status,
+                currency: acc.currency,
+                balance,
+                createdAt: acc.createdAt
+            };
+        })
+    );
+
+    return res.status(200).json({
+        success: true,
+        accounts: accountsWithBalance,
+        pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum)
+        }
+    });
+});
+
 module.exports = {
     getAllUsers,
     getUserById,
@@ -314,5 +440,7 @@ module.exports = {
     getSystemLedger,
     getFraudAlerts,
     getFraudStats,
-    reviewFraudAlert
+    reviewFraudAlert,
+    seedFunds,
+    listAllAccounts
 };
