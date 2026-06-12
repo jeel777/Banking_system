@@ -16,6 +16,13 @@ transactionRoutes.get(
     transactionController.getTransactionHistory
 );
 
+// GET /api/transactions/statement — Download PDF bank statement
+transactionRoutes.get(
+    "/statement",
+    authMiddleware,
+    transactionController.getTransactionStatement
+);
+
 // GET /api/transactions/:id — Single transaction detail
 transactionRoutes.get(
     "/:id",

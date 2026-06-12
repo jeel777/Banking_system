@@ -367,6 +367,12 @@ const seedFunds = catchAsync(async (req, res, next) => {
         await session.commitTransaction();
         session.endSession();
 
+        // Invalidate cached balances for involved accounts
+        await accountModel.invalidateBalanceCache(targetAccount._id);
+        if (systemAccount) {
+            await accountModel.invalidateBalanceCache(systemAccount._id);
+        }
+
         const newBalance = await targetAccount.getBalance();
 
         logger.info(`Admin ${req.user._id} seeded ₹${amount} to account ${toAccount}`);

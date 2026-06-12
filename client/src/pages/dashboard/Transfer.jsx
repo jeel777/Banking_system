@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { accounts, transactions } from '../../api/client';
-import { v4 as uuidv4 } from 'react';
 
 export default function Transfer() {
   const [userAccounts, setUserAccounts] = useState([]);

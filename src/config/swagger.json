@@ -1,0 +1,536 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Banking System API",
+    "description": "Enterprise-grade REST API for a banking system with ACID transactions, double-entry ledger, AI-powered fraud detection (Gemini), and admin management. Built with Express 5, MongoDB, and Zod validation.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Jeel Delvadiya"
+    }
+  },
+  "servers": [
+    { "url": "http://localhost:3000", "description": "Development server" }
+  ],
+  "tags": [
+    { "name": "Authentication", "description": "Register, login, logout, and session management" },
+    { "name": "Accounts", "description": "Create and manage bank accounts" },
+    { "name": "Transactions", "description": "Transfer funds between accounts with fraud detection" },
+    { "name": "Admin", "description": "Admin-only endpoints for user/account/fraud management" }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Register a new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password"],
+                "properties": {
+                  "name": { "type": "string", "example": "Jeel Delvadiya" },
+                  "email": { "type": "string", "format": "email", "example": "jeel@example.com" },
+                  "password": { "type": "string", "minLength": 8, "example": "SecurePass@123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/UserSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login with email and password",
+        "description": "Sets an httpOnly JWT cookie on successful login.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "jeel@example.com" },
+                  "password": { "type": "string", "example": "SecurePass@123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful (JWT set in httpOnly cookie)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/UserSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid email or password" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout and clear session cookie",
+        "responses": {
+          "200": { "description": "Logged out successfully" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get current authenticated user",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Current user details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "user": { "$ref": "#/components/schemas/UserSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Not authenticated" }
+        }
+      }
+    },
+    "/api/accounts": {
+      "get": {
+        "tags": ["Accounts"],
+        "summary": "List all accounts of the authenticated user",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Array of user's accounts with balances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "accounts": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Account" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Accounts"],
+        "summary": "Create a new bank account",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currency": { "type": "string", "enum": ["INR", "USD", "EUR"], "default": "INR" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Account created successfully" }
+        }
+      }
+    },
+    "/api/accounts/balance/{accountId}": {
+      "get": {
+        "tags": ["Accounts"],
+        "summary": "Get derived balance of an account (from ledger)",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account balance derived from double-entry ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "balance": { "type": "number", "example": 50000 },
+                    "account": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "Get transaction history (paginated + filterable)",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["sent", "received"] }, "description": "Filter by sent or received" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "completed", "failed", "reversed"] } },
+          { "name": "fromDate", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "toDate", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "minAmount", "in": "query", "schema": { "type": "number" } },
+          { "name": "maxAmount", "in": "query", "schema": { "type": "number" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated transaction list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "transactions": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Transaction" }
+                    },
+                    "pagination": { "$ref": "#/components/schemas/Pagination" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Transactions"],
+        "summary": "Create a new transfer (with AI fraud detection)",
+        "description": "Transfers funds between two accounts. Each transaction passes through a 7-rule fraud detection engine + Gemini AI analysis before execution. Uses MongoDB ACID sessions and double-entry ledger for data integrity.",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fromAccount", "toAccount", "amount", "idempotencyKey"],
+                "properties": {
+                  "fromAccount": { "type": "string", "description": "Source account ID" },
+                  "toAccount": { "type": "string", "description": "Destination account ID" },
+                  "amount": { "type": "number", "minimum": 1, "example": 5000 },
+                  "idempotencyKey": { "type": "string", "format": "uuid", "description": "Unique key to prevent duplicate transactions" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transfer completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "transaction": { "$ref": "#/components/schemas/Transaction" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Insufficient balance, inactive account, or validation error" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/transactions/statement": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "Download PDF bank statement",
+        "description": "Generates and downloads a PDF bank statement for a specific account.",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "accountId", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Account ID to generate statement for" },
+          { "name": "fromDate", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "toDate", "in": "query", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF file stream",
+            "content": {
+              "application/pdf": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "403": { "description": "User does not own this account" }
+        }
+      }
+    },
+    "/api/transactions/{id}": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "Get single transaction details",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Transaction details" },
+          "403": { "description": "User is not involved in this transaction" },
+          "404": { "description": "Transaction not found" }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List all users (paginated)",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated user list" },
+          "403": { "description": "Admin access required" }
+        }
+      }
+    },
+    "/api/admin/fraud-alerts": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List fraud alerts (paginated + filterable)",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "reviewed", "dismissed"] } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated fraud alert list with risk scores" }
+        }
+      }
+    },
+    "/api/admin/fraud-alerts/stats": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get fraud alert statistics",
+        "security": [{ "cookieAuth": [] }],
+        "responses": {
+          "200": { "description": "Aggregate fraud stats (total, by risk level, by status)" }
+        }
+      }
+    },
+    "/api/admin/fraud-alerts/{id}/review": {
+      "patch": {
+        "tags": ["Admin"],
+        "summary": "Review/dismiss a fraud alert",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["reviewed", "dismissed"] },
+                  "reviewNotes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Alert reviewed successfully" }
+        }
+      }
+    },
+    "/api/admin/ledger": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "View system-wide ledger entries",
+        "security": [{ "cookieAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated ledger entries (debit/credit)" }
+        }
+      }
+    },
+    "/api/admin/seed-funds": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Seed funds into any account (admin only)",
+        "security": [{ "cookieAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["toAccount", "amount"],
+                "properties": {
+                  "toAccount": { "type": "string" },
+                  "amount": { "type": "number", "minimum": 1, "example": 100000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Funds seeded successfully" }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Health check endpoint",
+        "responses": {
+          "200": {
+            "description": "API is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "token",
+        "description": "JWT token set as httpOnly cookie on login"
+      }
+    },
+    "schemas": {
+      "UserSummary": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "name": { "type": "string", "example": "Jeel Delvadiya" },
+          "email": { "type": "string", "example": "jeel@example.com" },
+          "role": { "type": "string", "enum": ["customer", "admin", "system"] }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "user": { "type": "string" },
+          "currency": { "type": "string", "enum": ["INR", "USD", "EUR"] },
+          "status": { "type": "string", "enum": ["active", "frozen", "closed"] },
+          "balance": { "type": "number" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "fromAccount": { "type": "string" },
+          "toAccount": { "type": "string" },
+          "amount": { "type": "number" },
+          "status": { "type": "string", "enum": ["pending", "completed", "failed", "reversed"] },
+          "riskScore": { "type": "number", "description": "AI-calculated fraud risk score (0-100)" },
+          "fraudAlert": { "type": "string", "description": "Reference to fraud alert if flagged" },
+          "idempotencyKey": { "type": "string", "format": "uuid" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total": { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Validation error (Zod)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "message": { "type": "string" },
+                "errors": { "type": "array", "items": { "type": "object" } }
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many requests — rate limit exceeded"
+      }
+    }
+  }
+}

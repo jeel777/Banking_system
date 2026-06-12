@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
-import { transactions } from '../../api/client';
+import { transactions, accounts } from '../../api/client';
 
 export default function Transactions() {
   const [txList, setTxList] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ type: '', status: '', page: 1 });
+  const [userAccounts, setUserAccounts] = useState([]);
+  const [statementAccount, setStatementAccount] = useState('');
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    accounts.list().then(d => {
+      const active = d.accounts.filter(a => a.status === 'active');
+      setUserAccounts(active);
+      if (active.length > 0) setStatementAccount(active[0]._id);
+    });
+  }, []);
 
   useEffect(() => { loadTransactions(); }, [filters]);
 
@@ -28,6 +39,18 @@ export default function Transactions() {
     }
   }
 
+  async function handleDownloadStatement() {
+    if (!statementAccount) return;
+    setDownloading(true);
+    try {
+      await transactions.downloadStatement(statementAccount);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <>
       <div className="page-header">
@@ -35,8 +58,8 @@ export default function Transactions() {
         <p>View all your past transactions</p>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+      {/* Filters & Statement Download */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
         <select className="form-select" style={{ width: 160 }} value={filters.type} onChange={e => setFilters(f => ({ ...f, type: e.target.value, page: 1 }))}>
           <option value="">All Types</option>
           <option value="sent">Sent</option>
@@ -49,6 +72,26 @@ export default function Transactions() {
           <option value="failed">Failed</option>
           <option value="reversed">Reversed</option>
         </select>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select className="form-select" style={{ width: 180 }} value={statementAccount} onChange={e => setStatementAccount(e.target.value)}>
+            {userAccounts.map(acc => (
+              <option key={acc._id} value={acc._id}>...{acc._id.slice(-8)} ({acc.currency})</option>
+            ))}
+          </select>
+          <button
+            className="btn btn-primary"
+            onClick={handleDownloadStatement}
+            disabled={downloading || !statementAccount}
+            style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {downloading ? (
+              <>⏳ Generating...</>
+            ) : (
+              <>📄 Download Statement</>
+            )}
+          </button>
+        </div>
       </div>
 
       {loading ? (

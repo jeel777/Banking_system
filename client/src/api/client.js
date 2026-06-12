@@ -39,6 +39,23 @@ export const transactions = {
   create: (body) => apiRequest('/transactions', { method: 'POST', body: JSON.stringify(body) }),
   list: (params = '') => apiRequest(`/transactions${params ? '?' + params : ''}`),
   getById: (id) => apiRequest(`/transactions/${id}`),
+  downloadStatement: async (accountId, fromDate, toDate) => {
+    const params = new URLSearchParams({ accountId });
+    if (fromDate) params.set('fromDate', fromDate);
+    if (toDate) params.set('toDate', toDate);
+    const res = await fetch(`${API_BASE}/transactions/statement?${params}`, { credentials: 'include' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to download statement');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `statement_${accountId.slice(-6)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ─── Admin ────────────────────────────────────────

@@ -2,8 +2,11 @@ const userModel = require('../models/user.model');
 const jwt = require('jsonwebtoken');
 const { sendRegistrationEmail } = require('../services/email');
 const tokenBlacklistModel = require('../models/blacklist.model');
+const redisClient = require('../config/redis');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
+
+const TOKEN_BLACKLIST_KEY = 'token:blacklist';
 
 // POST /api/auth/register
 const userRegisterController = catchAsync(async (req, res, next) => {
@@ -91,8 +94,20 @@ const userLogoutController = catchAsync(async (req, res, next) => {
 
     res.clearCookie("token");
 
-    // Add token to blacklist
+    // Add token to blacklist (MongoDB for durability + Redis for speed)
     await tokenBlacklistModel.create({ token });
+
+    try {
+        await redisClient.sadd(TOKEN_BLACKLIST_KEY, token);
+
+        // Clear user session cache on logout
+        const decoded = jwt.decode(token);
+        if (decoded?.userId) {
+            await redisClient.del(`user:${decoded.userId}`);
+        }
+    } catch {
+        // Non-critical — Redis may be unavailable
+    }
 
     return res.status(200).json({
         success: true,

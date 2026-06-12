@@ -55,8 +55,8 @@ const createTransaction = catchAsync(async (req, res, next) => {
         throw new AppError("One or both accounts are not active", 400);
     }
 
-    // Check balance
-    const balance = await fromUserAccount.getBalance();
+    // Check balance (bypass Redis cache for ACID correctness)
+    const balance = await fromUserAccount.getBalance({ skipCache: true });
 
     if (balance < amount) {
         throw new AppError(`Insufficient balance. Current: ${balance}, Required: ${amount}`, 400);
@@ -103,6 +103,12 @@ const createTransaction = catchAsync(async (req, res, next) => {
 
         await session.commitTransaction();
         session.endSession();
+
+        // Invalidate cached balances for both accounts
+        await Promise.all([
+            accountModel.invalidateBalanceCache(fromAccount),
+            accountModel.invalidateBalanceCache(toAccount)
+        ]);
 
         logger.info(`Transaction completed: ${amount} from ${fromAccount} to ${toAccount}`);
 
@@ -211,6 +217,12 @@ const createInitialTransaction = catchAsync(async (req, res, next) => {
 
         await session.commitTransaction();
         session.endSession();
+
+        // Invalidate cached balances for both accounts
+        await Promise.all([
+            accountModel.invalidateBalanceCache(fromUserAccount._id),
+            accountModel.invalidateBalanceCache(toAccount)
+        ]);
 
         logger.info(`Initial funds deposited: ${amount} to account ${toAccount}`);
 
@@ -344,9 +356,122 @@ const getTransactionById = catchAsync(async (req, res, next) => {
     });
 });
 
+// GET /api/transactions/statement — Download PDF bank statement
+const getTransactionStatement = catchAsync(async (req, res, next) => {
+    const { accountId, fromDate, toDate } = req.query;
+
+    if (!accountId) {
+        throw new AppError('accountId query parameter is required', 400);
+    }
+
+    // Verify user owns this account
+    const account = await accountModel.findById(accountId);
+    if (!account) {
+        throw new AppError('Account not found', 404);
+    }
+    if (account.user.toString() !== req.user._id.toString()) {
+        throw new AppError('You do not own this account', 403);
+    }
+
+    // Build date filter
+    const dateFilter = {};
+    if (fromDate) dateFilter.$gte = new Date(fromDate);
+    if (toDate) dateFilter.$lte = new Date(toDate);
+
+    const filter = {
+        $or: [{ fromAccount: accountId }, { toAccount: accountId }]
+    };
+    if (fromDate || toDate) filter.createdAt = dateFilter;
+
+    const txns = await transactionModel.find(filter).sort({ createdAt: -1 }).limit(500);
+    const user = await userModel.findById(req.user._id);
+    const balance = await account.getBalance();
+
+    // Generate PDF
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="statement_${accountId.slice(-6)}.pdf"`);
+    doc.pipe(res);
+
+    // ── Header ──
+    doc.fontSize(22).font('Helvetica-Bold').text('Delvadiya Bank', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text('Account Statement', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#3b82f6');
+    doc.moveDown(0.8);
+
+    // ── Account Info ──
+    doc.fontSize(10).font('Helvetica-Bold').text('Account Holder: ', { continued: true }).font('Helvetica').text(user.name);
+    doc.font('Helvetica-Bold').text('Account ID: ', { continued: true }).font('Helvetica').text(accountId);
+    doc.font('Helvetica-Bold').text('Currency: ', { continued: true }).font('Helvetica').text(account.currency || 'INR');
+    doc.font('Helvetica-Bold').text('Current Balance: ', { continued: true }).font('Helvetica').text(`₹${balance.toLocaleString('en-IN')}`);
+
+    const rangeFrom = fromDate ? new Date(fromDate).toLocaleDateString('en-IN') : 'All time';
+    const rangeTo = toDate ? new Date(toDate).toLocaleDateString('en-IN') : 'Present';
+    doc.font('Helvetica-Bold').text('Statement Period: ', { continued: true }).font('Helvetica').text(`${rangeFrom} — ${rangeTo}`);
+    doc.moveDown(1);
+
+    // ── Table Header ──
+    const tableTop = doc.y;
+    const colDate = 50, colType = 160, colAmount = 240, colCounterparty = 340, colStatus = 460;
+
+    doc.font('Helvetica-Bold').fontSize(9);
+    doc.fillColor('#3b82f6');
+    doc.text('Date', colDate, tableTop);
+    doc.text('Type', colType, tableTop);
+    doc.text('Amount (₹)', colAmount, tableTop);
+    doc.text('Counterparty', colCounterparty, tableTop);
+    doc.text('Status', colStatus, tableTop);
+    doc.fillColor('#000000');
+
+    doc.moveTo(50, tableTop + 14).lineTo(545, tableTop + 14).stroke('#ddd');
+
+    // ── Table Rows ──
+    let y = tableTop + 22;
+    doc.font('Helvetica').fontSize(8);
+
+    for (const tx of txns) {
+        if (y > 750) {
+            doc.addPage();
+            y = 50;
+        }
+
+        const isSent = tx.fromAccount.toString() === accountId;
+        const type = isSent ? 'Debit' : 'Credit';
+        const counterparty = isSent ? `...${tx.toAccount.toString().slice(-6)}` : `...${tx.fromAccount.toString().slice(-6)}`;
+        const date = new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+
+        doc.fillColor(isSent ? '#ef4444' : '#22c55e');
+        doc.text(date, colDate, y);
+        doc.text(type, colType, y);
+        doc.text(`${isSent ? '-' : '+'}${tx.amount.toLocaleString('en-IN')}`, colAmount, y);
+        doc.fillColor('#000000');
+        doc.text(counterparty, colCounterparty, y);
+        doc.text(tx.status, colStatus, y);
+
+        y += 16;
+    }
+
+    if (txns.length === 0) {
+        doc.moveDown(1);
+        doc.fontSize(11).text('No transactions found for this period.', { align: 'center' });
+    }
+
+    // ── Footer ──
+    doc.moveDown(2);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#3b82f6');
+    doc.moveDown(0.5);
+    doc.fontSize(8).fillColor('#888').text(`Generated on ${new Date().toLocaleString('en-IN')} | This is a computer-generated statement`, { align: 'center' });
+
+    doc.end();
+});
+
 module.exports = {
     createTransaction,
     createInitialTransaction,
     getTransactionHistory,
-    getTransactionById
+    getTransactionById,
+    getTransactionStatement
 };

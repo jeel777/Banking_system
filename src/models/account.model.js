@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 const ledgerModel = require('./ledger.model');
+const redisClient = require('../config/redis');
+
+const BALANCE_CACHE_TTL = 30; // 30 seconds
 
 const accountSchema = new mongoose.Schema({
 
@@ -35,7 +38,24 @@ accountSchema.index({ user: 1, status: 1 }); //called compound index to search f
 
 
 // will create a method to get balance from ledger model
-accountSchema.methods.getBalance = async function () {
+// Uses Redis cache (30s TTL) for read endpoints, with option to bypass for transactional accuracy
+accountSchema.methods.getBalance = async function (options = {}) {
+    const { skipCache = false } = options;
+    const cacheKey = `balance:${this._id}`;
+
+    // Check Redis cache first (unless explicitly bypassed for ACID correctness)
+    if (!skipCache) {
+        try {
+            const cached = await redisClient.get(cacheKey);
+            if (cached !== null) {
+                return parseFloat(cached);
+            }
+        } catch {
+            // Redis unavailable — fall through to MongoDB
+        }
+    }
+
+    // Cache miss or bypass — run the aggregation pipeline
     const balanceData = await ledgerModel.aggregate([
         {
             $match: {
@@ -75,11 +95,28 @@ accountSchema.methods.getBalance = async function () {
         }
     ]);
 
-    if (balanceData.length === 0) {
-        return 0;
+    const balance = balanceData.length === 0 ? 0 : balanceData[0].balance;
+
+    // Cache the computed balance
+    try {
+        await redisClient.setex(cacheKey, BALANCE_CACHE_TTL, balance.toString());
+    } catch {
+        // Non-critical
     }
 
-    return balanceData[0].balance;
+    return balance;
+};
+
+/**
+ * Invalidate the cached balance for a given account ID.
+ * Called after any transaction (debit/credit) to ensure consistency.
+ */
+accountSchema.statics.invalidateBalanceCache = async function (accountId) {
+    try {
+        await redisClient.del(`balance:${accountId}`);
+    } catch {
+        // Non-critical — cache will expire naturally
+    }
 };
 
 

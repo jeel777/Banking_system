@@ -1,0 +1,61 @@
+# Docker Compose — Full Stack Banking System
+# Usage: docker compose up --build
+
+services:
+  # ─── MongoDB ─────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: banking_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: banking_system
+
+  # ─── Redis ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: banking_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes  # Enable AOF persistence
+
+  # ─── Backend API ─────────────────────────────────
+  backend:
+    build: .
+    container_name: banking_backend
+    restart: unless-stopped
+    ports:
+      - "4000:3000"    # Host port 4000 → Container port 3000 (avoids conflict with local dev server)
+    depends_on:
+      - mongo
+      - redis
+    environment:
+      - PORT=3000
+      - MONGODB_URL=mongodb://mongo:27017/banking_system
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_change_in_production}
+      - NODE_ENV=production
+      - CLIENT_URL=http://localhost
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - ./logs:/app/logs
+
+  # ─── Frontend (Nginx) ───────────────────────────
+  frontend:
+    build: ./client
+    container_name: banking_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  redis_data:
