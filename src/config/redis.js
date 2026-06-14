@@ -8,7 +8,7 @@ const logger = require('../utils/logger');
  * - Graceful shutdown on SIGINT/SIGTERM
  */
 const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null,
     retryStrategy(times) {
         const delay = Math.min(times * 200, 3000); // Exponential backoff, max 3s
         logger.warn(`Redis reconnecting... attempt ${times} (delay: ${delay}ms)`);

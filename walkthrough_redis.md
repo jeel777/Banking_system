@@ -55,6 +55,16 @@ We executed a Node.js verification script ([verify_redis.js](file:///Users/jeel/
 - **Test**: Cleared rate limiter counters and made concurrent hits to verification endpoints.
 - **Results**: Rate limiter correctly recorded IP request counts in Redis under the prefix `rl:`.
 
+---
+
+## 🔧 Docker Compose Reconnect & Boot Fix
+
+During environment startup with `docker compose up`, services start asynchronously. We identified and resolved a race condition where the `backend` container would crash because `redis` was not fully ready to accept connections. 
+
+- **Problem**: `ioredis` had `maxRetriesPerRequest` set to `3`. If Redis took more than ~1 second to write its append-only files and boot, the backend exhausted its attempts during express-rate-limit store initialization and crashed.
+- **Solution**: Set `maxRetriesPerRequest` to `null` (default) in [redis.js](file:///Users/jeel/Desktop/banking_system/src/config/redis.js). This instructs the Redis client to queue command requests and retry indefinitely with exponential backoff on startup.
+- **Result**: Checked and verified that the entire stack now boots reliably with `docker compose up --build`.
+
 ```
-🎉 ALL INTEGRATION VERIFICATION TESTS PASSED SUCCESSFULLY!
+🎉 ALL INTEGRATION VERIFICATION TESTS & DOCKER COMPOSE BOOT TESTS PASSED SUCCESSFULLY!
 ```
