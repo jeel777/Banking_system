@@ -6,30 +6,46 @@ const logger = require('../utils/logger');
  * 
  * Handles:
  * - Custom AppError instances (operational errors)
- * - Mongoose validation errors
- * - Mongoose duplicate key errors (11000)
- * - Mongoose cast errors (invalid ObjectId)
+ * - Prisma known request errors (unique constraint, not found, etc.)
+ * - Prisma validation errors
  * - JWT errors (invalid/expired tokens)
  * - Unknown/unexpected errors (programming bugs)
  */
 
-// Handle Mongoose validation errors
-function handleValidationError(err) {
-    const errors = Object.values(err.errors).map((el) => el.message);
-    const message = `Validation failed: ${errors.join('. ')}`;
-    return { statusCode: 400, message };
+// Handle Prisma known request errors (P2002 = unique constraint, P2025 = not found, etc.)
+function handlePrismaClientKnownError(err) {
+    switch (err.code) {
+        case 'P2002': {
+            // Unique constraint violation
+            const field = err.meta?.target?.[0] || 'field';
+            const message = `Duplicate value for '${field}'. This ${field} is already in use.`;
+            return { statusCode: 409, message };
+        }
+        case 'P2025': {
+            // Record not found
+            const message = err.meta?.cause || 'Record not found';
+            return { statusCode: 404, message };
+        }
+        case 'P2003': {
+            // Foreign key constraint failure
+            const message = `Invalid reference: related record not found`;
+            return { statusCode: 400, message };
+        }
+        case 'P2014': {
+            // Required relation violation
+            const message = `Required relation violation`;
+            return { statusCode: 400, message };
+        }
+        default: {
+            const message = `Database error: ${err.message}`;
+            return { statusCode: 400, message };
+        }
+    }
 }
 
-// Handle Mongoose duplicate key errors
-function handleDuplicateKeyError(err) {
-    const field = Object.keys(err.keyValue)[0];
-    const message = `Duplicate value for '${field}'. This ${field} is already in use.`;
-    return { statusCode: 409, message };
-}
-
-// Handle Mongoose cast errors (invalid ObjectId, etc.)
-function handleCastError(err) {
-    const message = `Invalid value '${err.value}' for field '${err.path}'`;
+// Handle Prisma validation errors (invalid field values, types, etc.)
+function handlePrismaValidationError(err) {
+    const message = `Invalid data: ${err.message.split('\n').pop()?.trim() || err.message}`;
     return { statusCode: 400, message };
 }
 
@@ -49,18 +65,13 @@ function errorHandler(err, req, res, next) {
     let isOperational = err.isOperational || false;
 
     // Handle specific error types
-    if (err.name === 'ValidationError') {
-        const handled = handleValidationError(err);
+    if (err.name === 'PrismaClientKnownRequestError') {
+        const handled = handlePrismaClientKnownError(err);
         statusCode = handled.statusCode;
         message = handled.message;
         isOperational = true;
-    } else if (err.code === 11000) {
-        const handled = handleDuplicateKeyError(err);
-        statusCode = handled.statusCode;
-        message = handled.message;
-        isOperational = true;
-    } else if (err.name === 'CastError') {
-        const handled = handleCastError(err);
+    } else if (err.name === 'PrismaClientValidationError') {
+        const handled = handlePrismaValidationError(err);
         statusCode = handled.statusCode;
         message = handled.message;
         isOperational = true;

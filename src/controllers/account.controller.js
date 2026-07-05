@@ -1,4 +1,5 @@
-const AccountModel = require('../models/account.model');
+const prisma = require('../config/prisma');
+const { getBalance } = require('../utils/balance');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
@@ -6,8 +7,10 @@ const AppError = require('../utils/AppError');
 const createAccount = catchAsync(async (req, res, next) => {
     const user = req.user;
 
-    const account = await AccountModel.create({
-        user: user._id,
+    const account = await prisma.account.create({
+        data: {
+            userId: user.id,
+        }
     });
 
     return res.status(201).json({
@@ -19,7 +22,9 @@ const createAccount = catchAsync(async (req, res, next) => {
 
 // GET /api/accounts — Get all accounts of authenticated user
 const getUserAccountsController = catchAsync(async (req, res, next) => {
-    const accounts = await AccountModel.find({ user: req.user._id });
+    const accounts = await prisma.account.findMany({
+        where: { userId: req.user.id }
+    });
 
     return res.status(200).json({
         success: true,
@@ -32,19 +37,22 @@ const getUserAccountsController = catchAsync(async (req, res, next) => {
 const getAccountBalanceController = catchAsync(async (req, res, next) => {
     const accountId = req.params.accountId;
 
-    const account = await AccountModel.findOne(
-        { _id: accountId, user: req.user._id }
-    );
+    const account = await prisma.account.findFirst({
+        where: {
+            id: accountId,
+            userId: req.user.id
+        }
+    });
 
     if (!account) {
         throw new AppError('Account not found or you do not have access to it', 404);
     }
 
-    const balance = await account.getBalance();
+    const balance = await getBalance(account.id);
 
     return res.status(200).json({
         success: true,
-        accountId: account._id,
+        accountId: account.id,
         currency: account.currency,
         balance
     });

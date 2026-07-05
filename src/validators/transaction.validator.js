@@ -1,15 +1,15 @@
 const { z } = require('zod');
 
-// MongoDB ObjectId validation regex
-const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+// UUID validation regex (PostgreSQL uses UUIDs instead of MongoDB ObjectIds)
+const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 const transferSchema = z.object({
     fromAccount: z
         .string({ required_error: "fromAccount is required" })
-        .regex(objectIdRegex, "fromAccount must be a valid account ID"),
+        .regex(uuidRegex, "fromAccount must be a valid account ID"),
     toAccount: z
         .string({ required_error: "toAccount is required" })
-        .regex(objectIdRegex, "toAccount must be a valid account ID"),
+        .regex(uuidRegex, "toAccount must be a valid account ID"),
     amount: z
         .number({ required_error: "Amount is required" })
         .positive("Amount must be greater than 0")
@@ -26,7 +26,7 @@ const transferSchema = z.object({
 const initialFundsSchema = z.object({
     toAccount: z
         .string({ required_error: "toAccount is required" })
-        .regex(objectIdRegex, "toAccount must be a valid account ID"),
+        .regex(uuidRegex, "toAccount must be a valid account ID"),
     amount: z
         .number({ required_error: "Amount is required" })
         .positive("Amount must be greater than 0"),

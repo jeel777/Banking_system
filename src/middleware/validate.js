@@ -14,17 +14,20 @@ const AppError = require('../utils/AppError');
  */
 const validate = (schema, source = 'body') => {
     return (req, res, next) => {
-        const result = schema.safeParse(req[source]);
+        const data = req[source] ?? (source === 'body' ? {} : {});
+        const result = schema.safeParse(data);
 
         if (!result.success) {
-            const errors = result.error.errors.map((err) => ({
+            // Zod v4 uses .issues (not .errors)
+            const issues = result.error.issues || result.error.errors || [];
+            const errors = issues.map((err) => ({
                 field: err.path.join('.'),
                 message: err.message,
             }));
 
             const message = errors.map(e => `${e.field}: ${e.message}`).join('; ');
 
-            throw new AppError(message, 400);
+            throw new AppError(message || 'Validation failed', 400);
         }
 
         // Replace the source data with parsed/transformed data (trimmed, lowercased, etc.)

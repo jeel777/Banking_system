@@ -11,8 +11,8 @@
     80-100 → critical → AUTO-BLOCK
 */
 
-const transactionModel = require('../models/transaction.models');
-const accountModel = require('../models/account.model');
+const prisma = require('../config/prisma');
+const { getBalance } = require('../utils/balance');
 const logger = require('../utils/logger');
 
 // ─── Gemini AI Setup ──────────────────────────────────────
@@ -64,10 +64,12 @@ async function runRuleChecks(fromAccountId, amount, userId) {
 
     // 2. Velocity check — transactions in last 1 hour
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentTxCount1H = await transactionModel.countDocuments({
-        fromAccount: fromAccountId,
-        createdAt: { $gte: oneHourAgo },
-        status: 'completed'
+    const recentTxCount1H = await prisma.transaction.count({
+        where: {
+            fromAccountId,
+            createdAt: { gte: oneHourAgo },
+            status: 'completed'
+        }
     });
 
     if (recentTxCount1H >= THRESHOLDS.VELOCITY_1H_MAX) {
@@ -77,10 +79,12 @@ async function runRuleChecks(fromAccountId, amount, userId) {
 
     // 3. Rapid-fire check — transactions in last 10 minutes
     const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const recentTxCount10M = await transactionModel.countDocuments({
-        fromAccount: fromAccountId,
-        createdAt: { $gte: tenMinsAgo },
-        status: 'completed'
+    const recentTxCount10M = await prisma.transaction.count({
+        where: {
+            fromAccountId,
+            createdAt: { gte: tenMinsAgo },
+            status: 'completed'
+        }
     });
 
     if (recentTxCount10M >= THRESHOLDS.VELOCITY_10M_MAX) {
@@ -97,7 +101,7 @@ async function runRuleChecks(fromAccountId, amount, userId) {
     }
 
     // 5. New account check (created < 24 hours ago)
-    const fromAccount = await accountModel.findById(fromAccountId);
+    const fromAccount = await prisma.account.findUnique({ where: { id: fromAccountId } });
     if (fromAccount) {
         const accountAgeHours = (Date.now() - fromAccount.createdAt.getTime()) / (1000 * 60 * 60);
         if (accountAgeHours < THRESHOLDS.NEW_ACCOUNT_HOURS) {
@@ -106,7 +110,7 @@ async function runRuleChecks(fromAccountId, amount, userId) {
         }
 
         // 6. Near-drain check — would transaction leave < 5% balance?
-        const currentBalance = await fromAccount.getBalance();
+        const currentBalance = await getBalance(fromAccountId);
         const remainingPercent = ((currentBalance - amount) / currentBalance) * 100;
         if (remainingPercent < THRESHOLDS.DRAIN_PERCENTAGE && currentBalance > 0) {
             score += SCORE_WEIGHTS.NEAR_DRAIN;
@@ -221,17 +225,19 @@ async function analyzeTransaction(fromAccountId, toAccountId, amount, userId) {
         });
     } else if (ruleScore >= 50) {
         // HIGH — consult Gemini AI for deeper analysis
-        const fromAccount = await accountModel.findById(fromAccountId);
-        const currentBalance = fromAccount ? await fromAccount.getBalance() : 0;
+        const fromAccount = await prisma.account.findUnique({ where: { id: fromAccountId } });
+        const currentBalance = fromAccount ? await getBalance(fromAccountId) : 0;
         const accountAgeHours = fromAccount
             ? Math.round((Date.now() - fromAccount.createdAt.getTime()) / (1000 * 60 * 60))
             : 0;
 
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        const recentTxCount = await transactionModel.countDocuments({
-            fromAccount: fromAccountId,
-            createdAt: { $gte: oneHourAgo },
-            status: 'completed'
+        const recentTxCount = await prisma.transaction.count({
+            where: {
+                fromAccountId,
+                createdAt: { gte: oneHourAgo },
+                status: 'completed'
+            }
         });
 
         const aiResult = await getAIAnalysis({

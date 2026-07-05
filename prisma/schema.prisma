@@ -1,0 +1,161 @@
+// Banking System — Prisma Schema
+// PostgreSQL database with proper ACID, foreign keys, and enum types
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── User ─────────────────────────────────────────────────
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(customer)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts       Account[]
+  reviewedAlerts FraudAlert[] @relation("ReviewedBy")
+
+  @@map("users")
+}
+
+enum Role {
+  customer
+  admin
+  system
+}
+
+// ─── Account ──────────────────────────────────────────────
+model Account {
+  id        String        @id @default(uuid())
+  userId    String
+  status    AccountStatus @default(active)
+  currency  String        @default("INR")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user                 User          @relation(fields: [userId], references: [id])
+  ledgerEntries        Ledger[]
+  sentTransactions     Transaction[] @relation("FromAccount")
+  receivedTransactions Transaction[] @relation("ToAccount")
+  fraudAlertsFrom      FraudAlert[]  @relation("FraudFrom")
+  fraudAlertsTo        FraudAlert[]  @relation("FraudTo")
+
+  @@index([userId, status])
+  @@map("accounts")
+}
+
+enum AccountStatus {
+  active
+  frozen
+  closed
+}
+
+// ─── Transaction ──────────────────────────────────────────
+model Transaction {
+  id             String            @id @default(uuid())
+  fromAccountId  String
+  toAccountId    String
+  amount         Decimal           @db.Decimal(15, 2)
+  status         TransactionStatus @default(pending)
+  idempotencyKey String            @unique
+  riskScore      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  fromAccount   Account      @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount     Account      @relation("ToAccount", fields: [toAccountId], references: [id])
+  ledgerEntries Ledger[]
+  fraudAlerts   FraudAlert[]
+
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@map("transactions")
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+  reversed
+}
+
+// ─── Ledger (Immutable Entries) ───────────────────────────
+model Ledger {
+  id            String     @id @default(uuid())
+  accountId     String
+  transactionId String
+  amount        Decimal    @db.Decimal(15, 2)
+  type          LedgerType
+  createdAt     DateTime   @default(now())
+
+  account     Account     @relation(fields: [accountId], references: [id])
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([accountId])
+  @@index([transactionId])
+  @@map("ledger_entries")
+}
+
+enum LedgerType {
+  debit
+  credit
+}
+
+// ─── Fraud Alert ──────────────────────────────────────────
+model FraudAlert {
+  id             String      @id @default(uuid())
+  transactionId  String?
+  fromAccountId  String
+  toAccountId    String
+  amount         Decimal     @db.Decimal(15, 2)
+  riskScore      Int
+  riskLevel      RiskLevel
+  triggeredRules String[]
+  aiAnalysis     String?
+  status         FraudStatus @default(flagged)
+  reviewedById   String?
+  reviewNotes    String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+  fromAccount Account      @relation("FraudFrom", fields: [fromAccountId], references: [id])
+  toAccount   Account      @relation("FraudTo", fields: [toAccountId], references: [id])
+  reviewedBy  User?        @relation("ReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([riskLevel])
+  @@index([fromAccountId, createdAt(sort: Desc)])
+  @@map("fraud_alerts")
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum FraudStatus {
+  flagged
+  reviewed
+  dismissed
+  confirmed_fraud
+}
+
+// ─── Token Blacklist ──────────────────────────────────────
+model TokenBlacklist {
+  id        String   @id @default(uuid())
+  token     String
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@map("token_blacklist")
+}

@@ -1,8 +1,7 @@
 // Authentication middleware — verifies JWT tokens and attaches user to req
 // Uses Redis for O(1) token blacklist checks and user session caching
 const jwt = require('jsonwebtoken');
-const userModel = require('../models/user.model');
-const tokenBlacklistModel = require('../models/blacklist.model');
+const prisma = require('../config/prisma');
 const redisClient = require('../config/redis');
 const AppError = require('../utils/AppError');
 
@@ -11,8 +10,8 @@ const USER_CACHE_TTL = 600; // 10 minutes in seconds
 
 /**
  * Check if a token is blacklisted.
- * Redis SET lookup first (O(1)), falls through to MongoDB on miss.
- * Backfills Redis on MongoDB hit for future lookups.
+ * Redis SET lookup first (O(1)), falls through to PostgreSQL on miss.
+ * Backfills Redis on PostgreSQL hit for future lookups.
  */
 async function isTokenBlacklisted(token) {
     try {
@@ -20,12 +19,12 @@ async function isTokenBlacklisted(token) {
         const inRedis = await redisClient.sismember(TOKEN_BLACKLIST_KEY, token);
         if (inRedis) return true;
     } catch {
-        // Redis unavailable — fall through to MongoDB
+        // Redis unavailable — fall through to PostgreSQL
     }
 
-    // Fall through to MongoDB
-    const inMongo = await tokenBlacklistModel.findOne({ token });
-    if (inMongo) {
+    // Fall through to PostgreSQL
+    const inDB = await prisma.tokenBlacklist.findFirst({ where: { token } });
+    if (inDB) {
         // Backfill Redis so future checks are fast
         try {
             await redisClient.sadd(TOKEN_BLACKLIST_KEY, token);
@@ -39,7 +38,7 @@ async function isTokenBlacklisted(token) {
 }
 
 /**
- * Get cached user from Redis, or fetch from MongoDB and cache.
+ * Get cached user from Redis, or fetch from PostgreSQL and cache.
  */
 async function getCachedUser(userId) {
     try {
@@ -48,16 +47,21 @@ async function getCachedUser(userId) {
             return JSON.parse(cached);
         }
     } catch {
-        // Redis unavailable — fall through to MongoDB
+        // Redis unavailable — fall through to PostgreSQL
     }
 
-    // Cache miss — fetch from MongoDB
-    const user = await userModel.findById(userId);
+    // Cache miss — fetch from PostgreSQL
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (user) {
         try {
-            await redisClient.setex(`user:${userId}`, USER_CACHE_TTL, JSON.stringify(user.toObject()));
+            // Prisma returns plain objects — no need for .toObject()
+            const { password, ...safeUser } = user; // Exclude password from cache
+            await redisClient.setex(`user:${userId}`, USER_CACHE_TTL, JSON.stringify(safeUser));
+            return safeUser;
         } catch {
             // Non-critical
+            const { password, ...safeUser } = user;
+            return safeUser;
         }
     }
     return user;

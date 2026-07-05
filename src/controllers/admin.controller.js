@@ -1,9 +1,5 @@
-const userModel = require('../models/user.model');
-const accountModel = require('../models/account.model');
-const ledgerModel = require('../models/ledger.model');
-const transactionModel = require('../models/transaction.models');
-const FraudAlert = require('../models/fraudAlert.model');
-const mongoose = require('mongoose');
+const prisma = require('../config/prisma');
+const { getBalance, invalidateBalanceCache } = require('../utils/balance');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
@@ -16,8 +12,20 @@ const getAllUsers = catchAsync(async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [users, total] = await Promise.all([
-        userModel.find().sort({ createdAt: -1 }).skip(skip).limit(limitNum),
-        userModel.countDocuments()
+        prisma.user.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum,
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                createdAt: true,
+                updatedAt: true
+            }
+        }),
+        prisma.user.count()
     ]);
 
     return res.status(200).json({
@@ -34,13 +42,23 @@ const getAllUsers = catchAsync(async (req, res, next) => {
 
 // GET /api/admin/users/:id — Get single user details with accounts
 const getUserById = catchAsync(async (req, res, next) => {
-    const user = await userModel.findById(req.params.id);
+    const user = await prisma.user.findUnique({
+        where: { id: req.params.id },
+        select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            createdAt: true,
+            updatedAt: true
+        }
+    });
 
     if (!user) {
         throw new AppError('User not found', 404);
     }
 
-    const accounts = await accountModel.find({ user: user._id });
+    const accounts = await prisma.account.findMany({ where: { userId: user.id } });
 
     return res.status(200).json({
         success: true,
@@ -51,7 +69,7 @@ const getUserById = catchAsync(async (req, res, next) => {
 
 // PATCH /api/admin/accounts/:id/freeze — Freeze an account
 const freezeAccount = catchAsync(async (req, res, next) => {
-    const account = await accountModel.findById(req.params.id);
+    const account = await prisma.account.findUnique({ where: { id: req.params.id } });
 
     if (!account) {
         throw new AppError('Account not found', 404);
@@ -65,21 +83,23 @@ const freezeAccount = catchAsync(async (req, res, next) => {
         throw new AppError('Cannot freeze a closed account', 400);
     }
 
-    account.status = 'frozen';
-    await account.save();
+    const updatedAccount = await prisma.account.update({
+        where: { id: req.params.id },
+        data: { status: 'frozen' }
+    });
 
-    logger.warn(`Account ${account._id} frozen by admin ${req.user._id}`);
+    logger.warn(`Account ${account.id} frozen by admin ${req.user.id}`);
 
     return res.status(200).json({
         success: true,
         message: 'Account frozen successfully',
-        account
+        account: updatedAccount
     });
 });
 
 // PATCH /api/admin/accounts/:id/unfreeze — Unfreeze an account
 const unfreezeAccount = catchAsync(async (req, res, next) => {
-    const account = await accountModel.findById(req.params.id);
+    const account = await prisma.account.findUnique({ where: { id: req.params.id } });
 
     if (!account) {
         throw new AppError('Account not found', 404);
@@ -89,21 +109,23 @@ const unfreezeAccount = catchAsync(async (req, res, next) => {
         throw new AppError('Account is not frozen', 400);
     }
 
-    account.status = 'active';
-    await account.save();
+    const updatedAccount = await prisma.account.update({
+        where: { id: req.params.id },
+        data: { status: 'active' }
+    });
 
-    logger.info(`Account ${account._id} unfrozen by admin ${req.user._id}`);
+    logger.info(`Account ${account.id} unfrozen by admin ${req.user.id}`);
 
     return res.status(200).json({
         success: true,
         message: 'Account unfrozen successfully',
-        account
+        account: updatedAccount
     });
 });
 
 // PATCH /api/admin/accounts/:id/close — Close an account
 const closeAccount = catchAsync(async (req, res, next) => {
-    const account = await accountModel.findById(req.params.id);
+    const account = await prisma.account.findUnique({ where: { id: req.params.id } });
 
     if (!account) {
         throw new AppError('Account not found', 404);
@@ -114,7 +136,7 @@ const closeAccount = catchAsync(async (req, res, next) => {
     }
 
     // Check if account has remaining balance
-    const balance = await account.getBalance();
+    const balance = await getBalance(account.id);
     if (balance > 0) {
         throw new AppError(
             `Cannot close account with remaining balance of ${balance}. Please withdraw or transfer funds first.`,
@@ -122,15 +144,17 @@ const closeAccount = catchAsync(async (req, res, next) => {
         );
     }
 
-    account.status = 'closed';
-    await account.save();
+    const updatedAccount = await prisma.account.update({
+        where: { id: req.params.id },
+        data: { status: 'closed' }
+    });
 
-    logger.warn(`Account ${account._id} closed by admin ${req.user._id}`);
+    logger.warn(`Account ${account.id} closed by admin ${req.user.id}`);
 
     return res.status(200).json({
         success: true,
         message: 'Account closed successfully',
-        account
+        account: updatedAccount
     });
 });
 
@@ -142,14 +166,16 @@ const getSystemLedger = catchAsync(async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [entries, total] = await Promise.all([
-        ledgerModel
-            .find()
-            .sort({ _id: -1 })
-            .skip(skip)
-            .limit(limitNum)
-            .populate('account', 'currency status')
-            .populate('transaction', 'status amount'),
-        ledgerModel.countDocuments()
+        prisma.ledger.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum,
+            include: {
+                account: { select: { currency: true, status: true } },
+                transaction: { select: { status: true, amount: true } }
+            }
+        }),
+        prisma.ledger.count()
     ]);
 
     return res.status(200).json({
@@ -184,25 +210,29 @@ const getFraudAlerts = catchAsync(async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter
-    const filter = {};
-    if (status) filter.status = status;
-    if (riskLevel) filter.riskLevel = riskLevel;
+    const where = {};
+    if (status) where.status = status;
+    if (riskLevel) where.riskLevel = riskLevel;
     if (fromDate || toDate) {
-        filter.createdAt = {};
-        if (fromDate) filter.createdAt.$gte = new Date(fromDate);
-        if (toDate) filter.createdAt.$lte = new Date(toDate);
+        where.createdAt = {};
+        if (fromDate) where.createdAt.gte = new Date(fromDate);
+        if (toDate) where.createdAt.lte = new Date(toDate);
     }
 
     const [alerts, total] = await Promise.all([
-        FraudAlert.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limitNum)
-            .populate('fromAccount', 'currency status user')
-            .populate('toAccount', 'currency status user')
-            .populate('transaction', 'status amount')
-            .populate('reviewedBy', 'name email'),
-        FraudAlert.countDocuments(filter)
+        prisma.fraudAlert.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum,
+            include: {
+                fromAccount: { select: { currency: true, status: true, userId: true } },
+                toAccount: { select: { currency: true, status: true, userId: true } },
+                transaction: { select: { status: true, amount: true } },
+                reviewedBy: { select: { name: true, email: true } }
+            }
+        }),
+        prisma.fraudAlert.count({ where })
     ]);
 
     return res.status(200).json({
@@ -227,21 +257,25 @@ const getFraudStats = catchAsync(async (req, res, next) => {
         criticalAlerts,
         highAlerts,
         last24hAlerts,
-        totalBlockedAmount
+        totalBlockedAmountResult
     ] = await Promise.all([
-        FraudAlert.countDocuments(),
-        FraudAlert.countDocuments({ status: 'flagged' }),
-        FraudAlert.countDocuments({ status: 'confirmed_fraud' }),
-        FraudAlert.countDocuments({ status: 'dismissed' }),
-        FraudAlert.countDocuments({ riskLevel: 'critical' }),
-        FraudAlert.countDocuments({ riskLevel: 'high' }),
-        FraudAlert.countDocuments({
-            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        prisma.fraudAlert.count(),
+        prisma.fraudAlert.count({ where: { status: 'flagged' } }),
+        prisma.fraudAlert.count({ where: { status: 'confirmed_fraud' } }),
+        prisma.fraudAlert.count({ where: { status: 'dismissed' } }),
+        prisma.fraudAlert.count({ where: { riskLevel: 'critical' } }),
+        prisma.fraudAlert.count({ where: { riskLevel: 'high' } }),
+        prisma.fraudAlert.count({
+            where: {
+                createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+            }
         }),
-        FraudAlert.aggregate([
-            { $match: { riskLevel: { $in: ['critical', 'high'] } } },
-            { $group: { _id: null, total: { $sum: '$amount' } } }
-        ])
+        prisma.fraudAlert.aggregate({
+            where: {
+                riskLevel: { in: ['critical', 'high'] }
+            },
+            _sum: { amount: true }
+        })
     ]);
 
     return res.status(200).json({
@@ -254,7 +288,7 @@ const getFraudStats = catchAsync(async (req, res, next) => {
             criticalAlerts,
             highAlerts,
             last24hAlerts,
-            totalBlockedAmount: totalBlockedAmount[0]?.total || 0
+            totalBlockedAmount: parseFloat(totalBlockedAmountResult._sum.amount || 0)
         }
     });
 });
@@ -273,7 +307,7 @@ const reviewFraudAlert = catchAsync(async (req, res, next) => {
         throw new AppError(`Status must be one of: ${validStatuses.join(', ')}`, 400);
     }
 
-    const fraudAlert = await FraudAlert.findById(id);
+    const fraudAlert = await prisma.fraudAlert.findUnique({ where: { id } });
 
     if (!fraudAlert) {
         throw new AppError('Fraud alert not found', 404);
@@ -283,27 +317,33 @@ const reviewFraudAlert = catchAsync(async (req, res, next) => {
         throw new AppError(`Alert has already been reviewed (current status: ${fraudAlert.status})`, 400);
     }
 
-    fraudAlert.status = status;
-    fraudAlert.reviewedBy = req.user._id;
-    fraudAlert.reviewNotes = reviewNotes || null;
-    await fraudAlert.save();
+    const updatedAlert = await prisma.fraudAlert.update({
+        where: { id },
+        data: {
+            status,
+            reviewedById: req.user.id,
+            reviewNotes: reviewNotes || null
+        }
+    });
 
     // If confirmed fraud, freeze the sender's account
     if (status === 'confirmed_fraud') {
-        const account = await accountModel.findById(fraudAlert.fromAccount);
+        const account = await prisma.account.findUnique({ where: { id: fraudAlert.fromAccountId } });
         if (account && account.status === 'active') {
-            account.status = 'frozen';
-            await account.save();
-            logger.warn(`Account ${account._id} auto-frozen due to confirmed fraud (alert: ${fraudAlert._id})`);
+            await prisma.account.update({
+                where: { id: account.id },
+                data: { status: 'frozen' }
+            });
+            logger.warn(`Account ${account.id} auto-frozen due to confirmed fraud (alert: ${fraudAlert.id})`);
         }
     }
 
-    logger.info(`Fraud alert ${id} reviewed by admin ${req.user._id}: ${status}`);
+    logger.info(`Fraud alert ${id} reviewed by admin ${req.user.id}: ${status}`);
 
     return res.status(200).json({
         success: true,
         message: `Fraud alert marked as: ${status}`,
-        fraudAlert
+        fraudAlert: updatedAlert
     });
 });
 
@@ -319,79 +359,83 @@ const seedFunds = catchAsync(async (req, res, next) => {
         throw new AppError('Amount must be between 1 and 10,000,000', 400);
     }
 
-    const targetAccount = await accountModel.findById(toAccount).populate('user', 'name email');
+    const targetAccount = await prisma.account.findUnique({
+        where: { id: toAccount },
+        include: { user: { select: { name: true, email: true } } }
+    });
     if (!targetAccount) {
         throw new AppError('Target account not found', 404);
     }
 
     // Find or use system account as the source
-    const systemUser = await userModel.findOne({ role: 'system' });
+    const systemUser = await prisma.user.findFirst({ where: { role: 'system' } });
     let systemAccount = null;
     if (systemUser) {
-        systemAccount = await accountModel.findOne({ user: systemUser._id });
+        systemAccount = await prisma.account.findFirst({ where: { userId: systemUser.id } });
     }
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const tx = new transactionModel({
-            fromAccount: systemAccount ? systemAccount._id : targetAccount._id,
-            toAccount: targetAccount._id,
-            amount,
-            idempotencyKey: `admin-seed-${toAccount}-${Date.now()}`,
-            status: 'pending'
+    // Prisma interactive transaction
+    const tx = await prisma.$transaction(async (txClient) => {
+        const txRecord = await txClient.transaction.create({
+            data: {
+                fromAccountId: systemAccount ? systemAccount.id : targetAccount.id,
+                toAccountId: targetAccount.id,
+                amount,
+                idempotencyKey: `admin-seed-${toAccount}-${Date.now()}`,
+                status: 'pending'
+            }
         });
 
         // Debit system account (if exists)
         if (systemAccount) {
-            await ledgerModel.create([{
-                account: systemAccount._id,
-                amount,
-                transaction: tx._id,
-                type: 'debit'
-            }], { session });
+            await txClient.ledger.create({
+                data: {
+                    accountId: systemAccount.id,
+                    amount,
+                    transactionId: txRecord.id,
+                    type: 'debit'
+                }
+            });
         }
 
         // Credit target account
-        await ledgerModel.create([{
-            account: targetAccount._id,
-            amount,
-            transaction: tx._id,
-            type: 'credit'
-        }], { session });
-
-        tx.status = 'completed';
-        await tx.save({ session });
-
-        await session.commitTransaction();
-        session.endSession();
-
-        // Invalidate cached balances for involved accounts
-        await accountModel.invalidateBalanceCache(targetAccount._id);
-        if (systemAccount) {
-            await accountModel.invalidateBalanceCache(systemAccount._id);
-        }
-
-        const newBalance = await targetAccount.getBalance();
-
-        logger.info(`Admin ${req.user._id} seeded ₹${amount} to account ${toAccount}`);
-
-        return res.status(201).json({
-            success: true,
-            message: `Successfully seeded ₹${amount.toLocaleString('en-IN')} to account`,
-            transaction: tx,
-            recipient: {
-                accountId: targetAccount._id,
-                userName: targetAccount.user?.name,
-                newBalance
+        await txClient.ledger.create({
+            data: {
+                accountId: targetAccount.id,
+                amount,
+                transactionId: txRecord.id,
+                type: 'credit'
             }
         });
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        throw error;
+
+        const completedTx = await txClient.transaction.update({
+            where: { id: txRecord.id },
+            data: { status: 'completed' }
+        });
+
+        return completedTx;
+    });
+
+    // Invalidate cached balances for involved accounts
+    await invalidateBalanceCache(targetAccount.id);
+    if (systemAccount) {
+        await invalidateBalanceCache(systemAccount.id);
     }
+
+    const newBalance = await getBalance(targetAccount.id);
+
+    logger.info(`Admin ${req.user.id} seeded ₹${amount} to account ${toAccount}`);
+
+    return res.status(201).json({
+        success: true,
+        message: `Successfully seeded ₹${amount.toLocaleString('en-IN')} to account`,
+        transaction: tx,
+        recipient: {
+            accountId: targetAccount.id,
+            userName: targetAccount.user?.name,
+            newBalance
+        }
+    });
 });
 
 // GET /api/admin/accounts — List all accounts with balances
@@ -402,20 +446,23 @@ const listAllAccounts = catchAsync(async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [allAccounts, total] = await Promise.all([
-        accountModel.find()
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limitNum)
-            .populate('user', 'name email role'),
-        accountModel.countDocuments()
+        prisma.account.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum,
+            include: {
+                user: { select: { name: true, email: true, role: true } }
+            }
+        }),
+        prisma.account.count()
     ]);
 
     // Get balances
     const accountsWithBalance = await Promise.all(
         allAccounts.map(async (acc) => {
-            const balance = await acc.getBalance();
+            const balance = await getBalance(acc.id);
             return {
-                _id: acc._id,
+                id: acc.id,
                 user: acc.user,
                 status: acc.status,
                 currency: acc.currency,

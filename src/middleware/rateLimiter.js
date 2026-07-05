@@ -15,11 +15,9 @@ function createRedisStore(prefix) {
     });
 }
 
-/**
- * Global rate limiter — applies to all routes.
- * 100 requests per 15 minutes per IP.
- */
-const globalLimiter = rateLimit({
+const isTest = process.env.NODE_ENV === 'test';
+
+const globalLimiter = isTest ? (req, res, next) => next() : rateLimit({
     windowMs: 15 * 60 * 1000,  // 15 minutes
     max: 100,
     standardHeaders: true,      // Return rate limit info in the `RateLimit-*` headers
@@ -31,11 +29,7 @@ const globalLimiter = rateLimit({
     }
 });
 
-/**
- * Auth rate limiter — strict limit on login/register to prevent brute force.
- * 5 requests per 15 minutes per IP.
- */
-const authLimiter = rateLimit({
+const authLimiter = isTest ? (req, res, next) => next() : rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
     standardHeaders: true,
@@ -47,11 +41,7 @@ const authLimiter = rateLimit({
     }
 });
 
-/**
- * Transaction rate limiter — moderate limit on financial operations.
- * 20 transactions per 15 minutes per IP.
- */
-const transactionLimiter = rateLimit({
+const transactionLimiter = isTest ? (req, res, next) => next() : rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
     standardHeaders: true,

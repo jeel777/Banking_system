@@ -1,7 +1,7 @@
-const userModel = require('../models/user.model');
+const prisma = require('../config/prisma');
 const jwt = require('jsonwebtoken');
 const { sendRegistrationEmail } = require('../services/email');
-const tokenBlacklistModel = require('../models/blacklist.model');
+const { hashPassword, comparePassword } = require('../utils/password');
 const redisClient = require('../config/redis');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
@@ -12,17 +12,26 @@ const TOKEN_BLACKLIST_KEY = 'token:blacklist';
 const userRegisterController = catchAsync(async (req, res, next) => {
     const { email, name, password } = req.body;
 
-    const isUserExist = await userModel.findOne({ email: email });
+    const isUserExist = await prisma.user.findUnique({ where: { email } });
 
     if (isUserExist) {
         throw new AppError("User already exists with this email", 400);
     }
 
-    // If user does not exist, create new user
-    const newUser = new userModel({ name, email, password });
+    // Hash password before storing
+    const hashedPassword = await hashPassword(password);
+
+    // Create new user
+    const newUser = await prisma.user.create({
+        data: {
+            name,
+            email,
+            password: hashedPassword
+        }
+    });
 
     // Create JWT token for the user
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, { expiresIn: "10d" });
+    const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, { expiresIn: "10d" });
 
     // Set token in cookie
     res.cookie("token", token, {
@@ -31,8 +40,6 @@ const userRegisterController = catchAsync(async (req, res, next) => {
         sameSite: "strict",
         maxAge: 10 * 24 * 60 * 60 * 1000 // 10 days
     });
-
-    await newUser.save();
 
     res.status(201).json({
         success: true,
@@ -51,20 +58,20 @@ const userRegisterController = catchAsync(async (req, res, next) => {
 const userLoginController = catchAsync(async (req, res, next) => {
     const { email, password } = req.body;
 
-    const user = await userModel.findOne({ email: email }).select("+password");
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
         throw new AppError("Invalid email or password", 400);
     }
 
-    const isPasswordMatch = await user.comparePassword(password);
+    const isPasswordMatch = await comparePassword(password, user.password);
 
     if (!isPasswordMatch) {
         throw new AppError("Invalid email or password", 400);
     }
 
     // Create JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "10d" });
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "10d" });
 
     // Set token in cookie
     res.cookie("token", token, {
@@ -94,8 +101,8 @@ const userLogoutController = catchAsync(async (req, res, next) => {
 
     res.clearCookie("token");
 
-    // Add token to blacklist (MongoDB for durability + Redis for speed)
-    await tokenBlacklistModel.create({ token });
+    // Add token to blacklist (PostgreSQL for durability + Redis for speed)
+    await prisma.tokenBlacklist.create({ data: { token } });
 
     try {
         await redisClient.sadd(TOKEN_BLACKLIST_KEY, token);
@@ -120,7 +127,7 @@ const getMeController = catchAsync(async (req, res, next) => {
     return res.status(200).json({
         success: true,
         user: {
-            _id: req.user._id,
+            id: req.user.id,
             name: req.user.name,
             email: req.user.email,
             role: req.user.role

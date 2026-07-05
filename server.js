@@ -9,7 +9,6 @@ require('dotenv').config();
 const cluster = require('cluster');
 const os = require('os');
 const app = require('./src/app.js');
-const connectDB = require('./src/config/db.js');
 
 const PORT = process.env.PORT || 3000;
 const NUM_WORKERS = process.env.WEB_CONCURRENCY || os.cpus().length;
@@ -33,8 +32,7 @@ if (cluster.isPrimary) {
         console.log(`✅ Worker ${worker.process.pid} is online`);
     });
 } else {
-    // Each worker connects to DB, Redis, and starts listening
-    connectDB();
+    // Each worker starts listening — Prisma connects lazily on first query
     require('./src/config/redis.js'); // Initialize Redis connection per worker
 
     app.listen(PORT, () => {
