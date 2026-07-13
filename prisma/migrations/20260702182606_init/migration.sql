@@ -29,7 +29,6 @@ CREATE TABLE "users" (
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "accounts" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -41,7 +40,7 @@ CREATE TABLE "accounts" (
     CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
+
 CREATE TABLE "transactions" (
     "id" TEXT NOT NULL,
     "fromAccountId" TEXT NOT NULL,
@@ -56,7 +55,7 @@ CREATE TABLE "transactions" (
     CONSTRAINT "transactions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
+
 CREATE TABLE "ledger_entries" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
@@ -68,7 +67,7 @@ CREATE TABLE "ledger_entries" (
     CONSTRAINT "ledger_entries_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
+
 CREATE TABLE "fraud_alerts" (
     "id" TEXT NOT NULL,
     "transactionId" TEXT,
@@ -88,7 +87,7 @@ CREATE TABLE "fraud_alerts" (
     CONSTRAINT "fraud_alerts_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
+
 CREATE TABLE "token_blacklist" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,

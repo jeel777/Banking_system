@@ -31,3 +31,5 @@ const loginSchema = z.object({
 });
 
 module.exports = { registerSchema, loginSchema };
+
+// zod is javascript library for data validation.

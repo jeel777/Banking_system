@@ -1,14 +1,19 @@
 const express = require('express');
+
 const router = express.Router();
+
 const {
     userRegisterController,
     userLoginController,
     userLogoutController,
     getMeController
 } = require('../controllers/auth.controller');
+
 const { authMiddleware } = require('../middleware/auth.middleware');
+
 const validate = require('../middleware/validate');
 const { registerSchema, loginSchema } = require('../validators/auth.validator');
+
 const { authLimiter } = require('../middleware/rateLimiter');
 
 // POST /api/auth/register — Rate limited + validated

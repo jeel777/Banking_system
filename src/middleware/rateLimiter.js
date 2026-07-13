@@ -3,14 +3,14 @@ const RedisStore = require('rate-limit-redis').default;
 const redisClient = require('../config/redis');
 
 /**
- * Create a Redis-backed rate limit store.
- * All clustered workers share the same counters via Redis,
- * fixing the broken per-worker in-memory counting.
+ we will keep count store in redis 
+ as in case of load balanced we have multiple instances of our app and if we keep count in memory then it will not work correctly 
+ so we will keep count in redis     
  */
 function createRedisStore(prefix) {
     return new RedisStore({
         // Use ioredis `call` method for raw Redis commands
-        sendCommand: (...args) => redisClient.call(...args),
+        sendCommand: (...args) => redisClient.call(...args),   // sendCommand is function of ioredis 
         prefix: `rl:${prefix}:`,
     });
 }
@@ -21,7 +21,7 @@ const globalLimiter = isTest ? (req, res, next) => next() : rateLimit({
     windowMs: 15 * 60 * 1000,  // 15 minutes
     max: 100,
     standardHeaders: true,      // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false,       // Disable the `X-RateLimit-*` headers
+    legacyHeaders: false,       // Disable the `X-RateLimit-*` headers      older version so Disable it
     store: createRedisStore('global'),
     message: {
         success: false,

@@ -1,5 +1,6 @@
 // Banking System — Prisma Schema
-// PostgreSQL database with proper ACID, foreign keys, and enum types
+// command for prisma stuido = npm run prisma:studio
+// to see out databse table
 
 datasource db {
   provider = "postgresql"
@@ -20,7 +21,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   accounts       Account[]
-  reviewedAlerts FraudAlert[] @relation("ReviewedBy")
+  reviewedAlerts FraudAlert[] @relation("ReviewedBy") // this is one to many relationship in datbase = one admin can review many fraud alerts 
 
   @@map("users")
 }
@@ -40,7 +41,7 @@ model Account {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  user                 User          @relation(fields: [userId], references: [id])
+  user                 User          @relation(fields: [userId], references: [id]) // this means userId is foreigh key which is refer to user.id from user table
   ledgerEntries        Ledger[]
   sentTransactions     Transaction[] @relation("FromAccount")
   receivedTransactions Transaction[] @relation("ToAccount")
@@ -69,7 +70,7 @@ model Transaction {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  fromAccount   Account      @relation("FromAccount", fields: [fromAccountId], references: [id])
+  fromAccount   Account      @relation("FromAccount", fields: [fromAccountId], references: [id]) // this means 
   toAccount     Account      @relation("ToAccount", fields: [toAccountId], references: [id])
   ledgerEntries Ledger[]
   fraudAlerts   FraudAlert[]

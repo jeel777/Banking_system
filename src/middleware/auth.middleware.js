@@ -56,7 +56,7 @@ async function getCachedUser(userId) {
         try {
             // Prisma returns plain objects — no need for .toObject()
             const { password, ...safeUser } = user; // Exclude password from cache
-            await redisClient.setex(`user:${userId}`, USER_CACHE_TTL, JSON.stringify(safeUser));
+            await redisClient.setex(`user:${userId}`, USER_CACHE_TTL, JSON.stringify(safeUser)); 
             return safeUser;
         } catch {
             // Non-critical
