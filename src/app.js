@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -78,11 +79,21 @@ app.get("/api/health", (req, res) => {
     });
 });
 
-//  404 Handler 
+//  API 404 Handler — only for /api/* routes that don't match 
 const AppError = require('./utils/AppError');
-app.all('{/*path}', (req, res, next) => {
+app.all('/api/{*path}', (req, res, next) => {
     next(new AppError(`Cannot find ${req.method} ${req.originalUrl} on this server`, 404));
 });
+
+//  Production — serve React frontend from client/dist 
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../client/dist')));
+
+    // SPA fallback — any non-API route serves index.html for React Router
+    app.get('{/*path}', (req, res) => {
+        res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    });
+}
 
 //  Global Error Handler (must be last) 
 app.use(errorHandler);

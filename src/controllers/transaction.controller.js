@@ -5,17 +5,7 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
-/* Steps for transaction:
- 1. Validate the transaction details (amount, sender, receiver)
- 2. Validate idempotency key
- 3. Check account status
- 4. Derive account balance from ledger
- 5. Create transaction
- 6. Create debit and credit entries in ledger
- 7. Mark transaction as completed
- 8. Commit PostgreSQL transaction
- 9. Send email notifications to sender and receiver
-*/
+
 
 // POST /api/transactions — Transfer between accounts
 const createTransaction = catchAsync(async (req, res, next) => {
@@ -52,16 +42,37 @@ const createTransaction = catchAsync(async (req, res, next) => {
         throw new AppError("One or both accounts are not active", 400);
     }
 
-    // Check balance (bypass Redis cache for ACID correctness)
-    const balance = await getBalance(fromAccount, { skipCache: true });
-
-    if (balance < amount) {
-        throw new AppError(`Insufficient balance. Current: ${balance}, Required: ${amount}`, 400);
-    }
-
-    // Prisma interactive transaction (replaces mongoose.startSession)
+    // Prisma interactive transaction with row-level locking
     const transaction = await prisma.$transaction(async (tx) => {
-        // Create transaction record
+        // ── STEP 1: Lock the sender's account row ──
+        // SELECT ... FOR UPDATE acquires a row-level lock on A's account.
+        // If another transaction is already running for A, this will WAIT
+        // until that transaction commits or rolls back — preventing double-spend.
+        await tx.$queryRaw`SELECT id FROM "accounts" WHERE id = ${fromAccount} FOR UPDATE`;
+
+        // ── STEP 2: Check balance INSIDE the transaction (after lock) ──
+        // Now we're guaranteed no other transaction can modify A's ledger
+        // entries until we commit. The balance we read here is accurate.
+        const [creditResult, debitResult] = await Promise.all([
+            tx.ledger.aggregate({
+                where: { accountId: fromAccount, type: 'credit' },
+                _sum: { amount: true }
+            }),
+            tx.ledger.aggregate({
+                where: { accountId: fromAccount, type: 'debit' },
+                _sum: { amount: true }
+            })
+        ]);
+
+        const totalCredits = parseFloat(creditResult._sum.amount ?? 0);
+        const totalDebits = parseFloat(debitResult._sum.amount ?? 0);
+        const balance = totalCredits - totalDebits;
+
+        if (balance < amount) {
+            throw new AppError(`Insufficient balance. Current: ${balance}, Required: ${amount}`, 400);
+        }
+
+        // ── STEP 3: Create transaction record ──
         const txRecord = await tx.transaction.create({
             data: {
                 fromAccountId: fromAccount,
@@ -72,7 +83,7 @@ const createTransaction = catchAsync(async (req, res, next) => {
             }
         });
 
-        // Create debit entry (sender)
+        // ── STEP 4: Create debit entry (sender) ──
         await tx.ledger.create({
             data: {
                 accountId: fromAccount,
@@ -82,7 +93,7 @@ const createTransaction = catchAsync(async (req, res, next) => {
             }
         });
 
-        // Create credit entry (receiver)
+        // ── STEP 5: Create credit entry (receiver) ──
         await tx.ledger.create({
             data: {
                 accountId: toAccount,
@@ -92,7 +103,7 @@ const createTransaction = catchAsync(async (req, res, next) => {
             }
         });
 
-        // Mark transaction as completed
+        // ── STEP 6: Mark transaction as completed ──
         const completedTx = await tx.transaction.update({
             where: { id: txRecord.id },
             data: { status: "completed" }
@@ -173,7 +184,7 @@ const createInitialTransaction = catchAsync(async (req, res, next) => {
         throw new AppError("System user account not found", 400);
     }
 
-    // Prisma interactive transaction (replaces mongoose.startSession)
+    // Prisma interactive transaction 
     const transaction = await prisma.$transaction(async (tx) => {
         const txRecord = await tx.transaction.create({
             data: {
@@ -246,9 +257,10 @@ const getTransactionHistory = catchAsync(async (req, res, next) => {
         where: { userId: req.user.id },
         select: { id: true }
     });
-    const accountIds = userAccounts.map(a => a.id);
 
-    if (accountIds.length === 0) {
+    const accountIds = userAccounts.map(a => a.id); // converted from array of objects to simple array
+
+    if (accountIds.length === 0) {        // if there is no accounts simply return empty list instead of search in database 
         return res.status(200).json({
             success: true,
             transactions: [],
@@ -272,8 +284,8 @@ const getTransactionHistory = catchAsync(async (req, res, next) => {
         ];
     }
 
-    // Filter by date range
-    if (fromDate || toDate) {
+    // Filter by date range so controller will return in this range of date
+    if (fromDate || toDate) {     
         where.createdAt = {};
         if (fromDate) where.createdAt.gte = new Date(fromDate);
         if (toDate) where.createdAt.lte = new Date(toDate);
@@ -309,7 +321,7 @@ const getTransactionHistory = catchAsync(async (req, res, next) => {
         prisma.transaction.count({ where })
     ]);
 
-    return res.status(200).json({
+    return res.status(200).json({      
         success: true,
         transactions,
         pagination: {
@@ -376,8 +388,8 @@ const getTransactionStatement = catchAsync(async (req, res, next) => {
 
     // Build date filter
     const dateFilter = {};
-    if (fromDate) dateFilter.gte = new Date(fromDate);
-    if (toDate) dateFilter.lte = new Date(toDate);
+    if (fromDate) dateFilter.gte = new Date(fromDate);   // greater than or equal to 
+    if (toDate) dateFilter.lte = new Date(toDate);     // less than or equal to
 
     const where = {
         OR: [{ fromAccountId: accountId }, { toAccountId: accountId }]
@@ -483,3 +495,25 @@ module.exports = {
     getTransactionById,
     getTransactionStatement
 };
+
+
+
+
+
+
+
+
+
+
+
+/* Steps for transaction:
+ 1. Validate the transaction details (amount, sender, receiver)
+ 2. Validate idempotency key
+ 3. Check account status
+ 4. Derive account balance from ledger
+ 5. Create transaction
+ 6. Create debit and credit entries in ledger
+ 7. Mark transaction as completed
+ 8. Commit PostgreSQL transaction
+ 9. Send email notifications to sender and receiver
+*/

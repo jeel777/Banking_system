@@ -1,0 +1,32 @@
+# Render Blueprint — Banking System
+# Deploy via: https://render.com/deploy → connect your GitHub repo
+# Render will auto-detect this file and configure the service
+
+services:
+  - type: web
+    name: banking-system
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: DATABASE_URL
+        sync: false  # Set manually in Render dashboard
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: CLIENT_SECRET
+        sync: false
+      - key: REFRESH_TOKEN
+        sync: false

@@ -10,8 +10,13 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
 
 // Create a PostgreSQL connection pool
+// Enable SSL when connecting to cloud providers like Neon (detected via sslmode in URL)
+const connectionString = process.env.DATABASE_URL;
+const useSSL = connectionString?.includes('sslmode=require');
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
+    ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
 // Initialize the Prisma PG adapter

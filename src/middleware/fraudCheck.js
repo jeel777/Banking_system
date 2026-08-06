@@ -72,7 +72,7 @@ const fraudCheck = catchAsync(async (req, res, next) => {
     }
 
     // Medium/high risk but not blocked — flag and continue
-    logger.info('⚠️  Transaction flagged but allowed', {
+    logger.info('Transaction flagged but allowed', {
         fraudAlertId: fraudAlert.id,
         riskScore: result.riskScore,
         riskLevel: result.riskLevel

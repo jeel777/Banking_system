@@ -15,7 +15,7 @@ const prisma = require('../config/prisma');
 const { getBalance } = require('../utils/balance');
 const logger = require('../utils/logger');
 
-// ─── Gemini AI Setup ──────────────────────────────────────
+//  Gemini AI Setup 
 let genAI = null;
 
 function getGeminiClient() {
@@ -26,10 +26,10 @@ function getGeminiClient() {
     return genAI;
 }
 
-// ─── Constants ────────────────────────────────────────────
+//  Constants 
 const THRESHOLDS = {
-    HIGH_AMOUNT: 50000,           // ₹50,000
-    VERY_HIGH_AMOUNT: 200000,     // ₹2,00,000
+    HIGH_AMOUNT: 50000,           
+    VERY_HIGH_AMOUNT: 200000,     
     VELOCITY_1H_MAX: 5,           // max transactions in 1 hour
     VELOCITY_10M_MAX: 3,          // max transactions in 10 minutes
     ODD_HOURS_START: 1,           // 1 AM
@@ -48,7 +48,7 @@ const SCORE_WEIGHTS = {
     NEAR_DRAIN: 20,
 };
 
-// ─── Rule-Based Scoring Engine ────────────────────────────
+//  Rule-Based Scoring Engine 
 async function runRuleChecks(fromAccountId, amount, userId) {
     const triggeredRules = [];
     let score = 0;
@@ -124,7 +124,7 @@ async function runRuleChecks(fromAccountId, amount, userId) {
     return { score, triggeredRules };
 }
 
-// ─── Gemini AI Analysis ───────────────────────────────────
+//  Gemini AI Analysis 
 async function getAIAnalysis(transactionContext) {
     if (!process.env.GEMINI_API_KEY) {
         logger.warn('GEMINI_API_KEY not set — skipping AI analysis');
@@ -195,7 +195,7 @@ IMPORTANT: Respond with ONLY the JSON object, no markdown formatting, no code bl
     }
 }
 
-// ─── Risk Level Classification ────────────────────────────
+//  Risk Level Classification 
 function getRiskLevel(score) {
     if (score >= 80) return 'critical';
     if (score >= 50) return 'high';
@@ -203,7 +203,7 @@ function getRiskLevel(score) {
     return 'low';
 }
 
-// ─── Main Entry Point ─────────────────────────────────────
+//  Main Entry Point 
 async function analyzeTransaction(fromAccountId, toAccountId, amount, userId) {
     logger.info('Fraud detection started', { fromAccountId, toAccountId, amount });
 

@@ -7,7 +7,12 @@ const logger = require('../utils/logger');
  * - Logs connection events via Winston
  * - Graceful shutdown on SIGINT/SIGTERM
  */
-const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+// Enable TLS for Upstash and other cloud Redis providers (rediss:// protocol)
+const redisTLS = redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {};
+
+const redisClient = new Redis(redisUrl, {
     maxRetriesPerRequest: null,
     retryStrategy(times) {
         const delay = Math.min(times * 200, 3000); // Exponential backoff, max 3s
@@ -15,6 +20,7 @@ const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379',
         return delay;
     },
     lazyConnect: false, // Connect immediately on import
+    ...redisTLS,
 });
 
 redisClient.on('connect', () => {

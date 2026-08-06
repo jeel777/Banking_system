@@ -11,9 +11,9 @@ const os = require('os');
 const app = require('./src/app.js');
 
 const PORT = process.env.PORT || 3000;
-const NUM_WORKERS = process.env.WEB_CONCURRENCY || os.cpus().length;
+const NUM_WORKERS = parseInt(process.env.WEB_CONCURRENCY, 10) || os.cpus().length;
 
-if (cluster.isPrimary) {
+if (NUM_WORKERS > 1 && cluster.isPrimary) {
     console.log(`🏦 Primary process ${process.pid} is running`);
     console.log(`🔧 Forking ${NUM_WORKERS} workers...`);
 
@@ -32,10 +32,10 @@ if (cluster.isPrimary) {
         console.log(`✅ Worker ${worker.process.pid} is online`);
     });
 } else {
-    // Each worker starts listening — Prisma connects lazily on first query
-    require('./src/config/redis.js'); // Initialize Redis connection per worker
+    // Single-worker mode (free tier) or worker process in clustered mode
+    require('./src/config/redis.js'); // Initialize Redis connection
 
     app.listen(PORT, () => {
-        console.log(`🚀 Worker ${process.pid} listening on port ${PORT}`);
+        console.log(`🚀 Server listening on port ${PORT} (PID: ${process.pid})`);
     });
 }

@@ -10,7 +10,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// ─── User ─────────────────────────────────────────────────
+//  User 
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -26,13 +26,13 @@ model User {
   @@map("users")
 }
 
-enum Role {
+enum Role {. // no role outside this enum can be assigned to user 
   customer
   admin
   system
 }
 
-// ─── Account ──────────────────────────────────────────────
+//  Account 
 model Account {
   id        String        @id @default(uuid())
   userId    String
@@ -45,7 +45,7 @@ model Account {
   ledgerEntries        Ledger[]
   sentTransactions     Transaction[] @relation("FromAccount")
   receivedTransactions Transaction[] @relation("ToAccount")
-  fraudAlertsFrom      FraudAlert[]  @relation("FraudFrom")
+  fraudAlertsFrom      FraudAlert[]  @relation("FraudFrom")  // two fraudalert bec there are 2 condition for fraud alert one is fraud is dont by this account and second is account received fraud alert from someone 
   fraudAlertsTo        FraudAlert[]  @relation("FraudTo")
 
   @@index([userId, status])
@@ -58,7 +58,7 @@ enum AccountStatus {
   closed
 }
 
-// ─── Transaction ──────────────────────────────────────────
+//  Transaction 
 model Transaction {
   id             String            @id @default(uuid())
   fromAccountId  String
@@ -70,7 +70,7 @@ model Transaction {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  fromAccount   Account      @relation("FromAccount", fields: [fromAccountId], references: [id]) // this means 
+  fromAccount   Account      @relation("FromAccount", fields: [fromAccountId], references: [id])     
   toAccount     Account      @relation("ToAccount", fields: [toAccountId], references: [id])
   ledgerEntries Ledger[]
   fraudAlerts   FraudAlert[]
@@ -87,7 +87,7 @@ enum TransactionStatus {
   reversed
 }
 
-// ─── Ledger (Immutable Entries) ───────────────────────────
+//  Ledger (Immutable Entries) 
 model Ledger {
   id            String     @id @default(uuid())
   accountId     String
@@ -109,7 +109,7 @@ enum LedgerType {
   credit
 }
 
-// ─── Fraud Alert ──────────────────────────────────────────
+//  Fraud Alert 
 model FraudAlert {
   id             String      @id @default(uuid())
   transactionId  String?
@@ -151,7 +151,7 @@ enum FraudStatus {
   confirmed_fraud
 }
 
-// ─── Token Blacklist ──────────────────────────────────────
+//  Token Blacklist 
 model TokenBlacklist {
   id        String   @id @default(uuid())
   token     String
