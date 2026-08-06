@@ -5,7 +5,6 @@ const validate = require("../middleware/validate");
 const { transferSchema, initialFundsSchema, transactionHistorySchema } = require("../validators/transaction.validator");
 const { transactionLimiter } = require("../middleware/rateLimiter");
 const fraudCheck = require("../middleware/fraudCheck");
-const { isAdmin } = require("../middleware/authorization.middleware");
 
 const transactionRoutes = Router();
 
