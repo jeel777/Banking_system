@@ -16,7 +16,7 @@ export default function FraudAlertDetail() {
 
   useEffect(() => {
     admin.getFraudAlerts(`page=1&limit=100`).then(data => {
-      const found = data.alerts.find(a => a._id === id);
+      const found = data.alerts.find(a => a.id === id);
       setAlert(found || null);
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]);
@@ -56,7 +56,7 @@ export default function FraudAlertDetail() {
         <div className="detail-grid">
           <div className="detail-item">
             <div className="detail-label">Alert ID</div>
-            <div className="detail-value">{alert._id}</div>
+            <div className="detail-value">{alert.id}</div>
           </div>
           <div className="detail-item">
             <div className="detail-label">Date</div>
@@ -68,15 +68,15 @@ export default function FraudAlertDetail() {
           </div>
           <div className="detail-item">
             <div className="detail-label">From Account</div>
-            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.fromAccount?._id || alert.fromAccount}</div>
+            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.fromAccount?.id || alert.fromAccount}</div>
           </div>
           <div className="detail-item">
             <div className="detail-label">To Account</div>
-            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.toAccount?._id || alert.toAccount}</div>
+            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.toAccount?.id || alert.toAccount}</div>
           </div>
           <div className="detail-item">
             <div className="detail-label">Linked Transaction</div>
-            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.transaction?._id || 'Blocked (none created)'}</div>
+            <div className="detail-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{alert.transaction?.id || 'Blocked (none created)'}</div>
           </div>
         </div>
       </div>

@@ -11,7 +11,9 @@ const os = require('os');
 const app = require('./src/app.js');
 
 const PORT = process.env.PORT || 3000;
-const NUM_WORKERS = parseInt(process.env.WEB_CONCURRENCY, 10) || os.cpus().length;
+// Run one worker by default. Deployments can opt in to clustering explicitly;
+// this avoids opening a full Redis/PostgreSQL pool per CPU on local machines.
+const NUM_WORKERS = Math.max(1, parseInt(process.env.WEB_CONCURRENCY, 10) || 1);
 
 if (NUM_WORKERS > 1 && cluster.isPrimary) {
     console.log(`🏦 Primary process ${process.pid} is running`);

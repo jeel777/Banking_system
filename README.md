@@ -6,7 +6,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://docker.com/)
 [![Gemini AI](https://img.shields.io/badge/Gemini_AI-Fraud_Detection-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
@@ -59,9 +59,9 @@ A production-ready, full-stack banking system featuring ACID-compliant transacti
 │  │   Worker 1  │  Worker 2  │  Worker 3  │  ...    │           │
 │  └─────────────────────────────────────────────────┘           │
 └────────────────────────┬────────────────────────────────────────┘
-                         │ Mongoose (Connection Pool: 50)
+                         │ Prisma + PostgreSQL connection pool
 ┌────────────────────────▼────────────────────────────────────────┐
-│                     MongoDB (ACID Sessions)                     │
+│                     PostgreSQL (ACID transactions)               │
 │  ┌──────────┐  ┌────────────┐  ┌────────────┐  ┌───────────┐  │
 │  │  Users   │  │  Accounts  │  │   Ledger   │  │   Fraud   │  │
 │  │          │  │            │  │(Double-Ent)│  │  Alerts   │  │
@@ -82,7 +82,7 @@ A production-ready, full-stack banking system featuring ACID-compliant transacti
 - Input validation with **Zod** schemas
 
 ### 💸 Banking Operations
-- **ACID-compliant transactions** using MongoDB sessions
+- **ACID-compliant transactions** using PostgreSQL transactions
 - **Double-entry ledger** — every transaction creates balanced debit/credit entries
 - **Idempotency keys** — prevents duplicate transaction processing
 - **Balance derived from ledger** — no stored balance, always computed from entries
@@ -114,7 +114,7 @@ A production-ready, full-stack banking system featuring ACID-compliant transacti
 |-------|-----------|
 | **Frontend** | React 19, Vite 8, React Router 7 |
 | **Backend** | Node.js 20, Express 5 |
-| **Database** | MongoDB 7 (Mongoose 9) |
+| **Database** | PostgreSQL 16 (Prisma 7) |
 | **AI** | Google Gemini API (`@google/genai`) |
 | **Auth** | JWT (jsonwebtoken), bcryptjs |
 | **Validation** | Zod 4 |
@@ -123,7 +123,7 @@ A production-ready, full-stack banking system featuring ACID-compliant transacti
 | **PDF** | PDFKit |
 | **API Docs** | Swagger UI (OpenAPI 3.0) |
 | **DevOps** | Docker, Docker Compose, Nginx |
-| **Scalability** | Node.js Cluster, Gzip Compression, MongoDB Connection Pooling |
+| **Scalability** | Optional Node.js Cluster, Gzip Compression, PostgreSQL Connection Pooling |
 
 ---
 
@@ -131,7 +131,7 @@ A production-ready, full-stack banking system featuring ACID-compliant transacti
 
 ### Prerequisites
 - Node.js 20+
-- MongoDB (local or Atlas)
+- PostgreSQL (local or hosted)
 - Google Gemini API key (optional, for AI fraud detection)
 
 ### Option 1: Local Development
@@ -149,7 +149,7 @@ cd client && npm install && cd ..
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your MongoDB URL and JWT secret
+# Edit .env with your PostgreSQL URL and JWT secret
 
 # Start backend (port 3000)
 npm run dev
@@ -161,7 +161,7 @@ cd client && npm run dev
 ### Option 2: Docker (One Command)
 
 ```bash
-# Start everything — MongoDB, backend, frontend
+# Start everything — PostgreSQL, Redis, backend, frontend
 docker compose up --build
 
 # Access the app at http://localhost
@@ -208,7 +208,7 @@ banking_system/
 ├── src/
 │   ├── app.js                 # Express app setup + middleware
 │   ├── config/
-│   │   ├── db.js              # MongoDB connection (pooled)
+│   │   ├── prisma.js          # PostgreSQL connection pool and Prisma client
 │   │   └── swagger.json       # OpenAPI 3.0 specification
 │   ├── controllers/
 │   │   ├── auth.controller.js
@@ -259,18 +259,21 @@ banking_system/
 PORT=3000
 NODE_ENV=development
 
-# MongoDB
-MONGODB_URL=mongodb://localhost:27017/banking_system
+# PostgreSQL
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/banking_system
+
+# Redis
+REDIS_URL=redis://localhost:6379
 
 # JWT
 JWT_SECRET=your_super_secret_jwt_key
 JWT_EXPIRES_IN=7d
 
-# Email (Nodemailer)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
+# Email (Gmail OAuth2, optional)
 EMAIL_USER=your@email.com
-EMAIL_PASS=your_app_password
+CLIENT_ID=your_google_client_id
+CLIENT_SECRET=your_google_client_secret
+REFRESH_TOKEN=your_google_refresh_token
 
 # AI Fraud Detection (optional)
 GEMINI_API_KEY=your_gemini_api_key
@@ -287,8 +290,8 @@ This system is designed to scale horizontally and vertically:
 
 | Feature | Implementation | Impact |
 |---------|---------------|--------|
-| **Cluster Mode** | `server.js` forks one worker per CPU core | Utilize all CPU cores |
-| **Connection Pooling** | MongoDB pool of 50 connections per worker | Handle concurrent DB operations |
+| **Cluster Mode** | Set `WEB_CONCURRENCY` above 1 to fork workers | Utilize all CPU cores when configured |
+| **Connection Pooling** | PostgreSQL pool per worker | Handle concurrent DB operations |
 | **Gzip Compression** | `compression` middleware on all responses | ~70% bandwidth reduction |
 | **Rate Limiting** | Per-IP throttling (100 req/15min global) | Prevent abuse |
 | **Docker Ready** | `docker-compose.yml` for instant deployment | Scale with orchestrators |

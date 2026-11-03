@@ -46,7 +46,7 @@ export default function Users() {
               </thead>
               <tbody>
                 {users.map(u => (
-                  <tr key={u._id}>
+                  <tr key={u.id}>
                     <td style={{ fontWeight: 600 }}>{u.name}</td>
                     <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
                     <td>
@@ -55,7 +55,7 @@ export default function Users() {
                       </span>
                     </td>
                     <td>{new Date(u.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>...{u._id.slice(-8)}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>...{u.id.slice(-8)}</td>
                   </tr>
                 ))}
               </tbody>

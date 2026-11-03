@@ -171,8 +171,8 @@ const getSystemLedger = catchAsync(async (req, res, next) => {
             skip,
             take: limitNum,
             include: {
-                account: { select: { currency: true, status: true } },
-                transaction: { select: { status: true, amount: true } }
+                account: { select: { id: true, currency: true, status: true } },
+                transaction: { select: { id: true, status: true, amount: true } }
             }
         }),
         prisma.ledger.count()
@@ -226,9 +226,9 @@ const getFraudAlerts = catchAsync(async (req, res, next) => {
             skip,
             take: limitNum,
             include: {
-                fromAccount: { select: { currency: true, status: true, userId: true } },
-                toAccount: { select: { currency: true, status: true, userId: true } },
-                transaction: { select: { status: true, amount: true } },
+                fromAccount: { select: { id: true, currency: true, status: true, userId: true } },
+                toAccount: { select: { id: true, currency: true, status: true, userId: true } },
+                transaction: { select: { id: true, status: true, amount: true } },
                 reviewedBy: { select: { name: true, email: true } }
             }
         }),

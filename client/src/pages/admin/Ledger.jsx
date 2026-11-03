@@ -51,7 +51,7 @@ export default function Ledger() {
               </thead>
               <tbody>
                 {entries.map(entry => (
-                  <tr key={entry._id}>
+                  <tr key={entry.id}>
                     <td>
                       <span className={`badge ${entry.type === 'credit' ? 'badge-success' : 'badge-danger'}`}>
                         {entry.type === 'credit' ? '↓ Credit' : '↑ Debit'}
@@ -61,10 +61,10 @@ export default function Ledger() {
                       {entry.type === 'credit' ? '+' : '-'}₹{entry.amount?.toLocaleString('en-IN')}
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      ...{(entry.account?._id || entry.account || '').slice(-8)}
+                      ...{(entry.account?.id || entry.account || '').slice(-8)}
                     </td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      ...{(entry.transaction?._id || entry.transaction || '').slice(-8)}
+                      ...{(entry.transaction?.id || entry.transaction || '').slice(-8)}
                     </td>
                     <td>
                       <span className={`badge ${entry.transaction?.status === 'completed' ? 'badge-success' : 'badge-warning'}`}>

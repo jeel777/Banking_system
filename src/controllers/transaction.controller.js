@@ -314,8 +314,8 @@ const getTransactionHistory = catchAsync(async (req, res, next) => {
             skip,
             take: limitNum,
             include: {
-                fromAccount: { select: { currency: true, status: true } },
-                toAccount: { select: { currency: true, status: true } }
+                fromAccount: { select: { id: true, currency: true, status: true } },
+                toAccount: { select: { id: true, currency: true, status: true } }
             }
         }),
         prisma.transaction.count({ where })
@@ -340,8 +340,8 @@ const getTransactionById = catchAsync(async (req, res, next) => {
     const transaction = await prisma.transaction.findUnique({
         where: { id },
         include: {
-            fromAccount: { select: { currency: true, status: true, userId: true } },
-            toAccount: { select: { currency: true, status: true, userId: true } }
+            fromAccount: { select: { id: true, currency: true, status: true, userId: true } },
+            toAccount: { select: { id: true, currency: true, status: true, userId: true } }
         }
     });
 

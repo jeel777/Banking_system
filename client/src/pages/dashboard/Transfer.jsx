@@ -64,8 +64,8 @@ export default function Transfer() {
               <select className="form-select" value={fromAccount} onChange={e => setFromAccount(e.target.value)} required>
                 <option value="">Select your account</option>
                 {userAccounts.map(acc => (
-                  <option key={acc._id} value={acc._id}>
-                    ...{acc._id.slice(-8)} ({acc.currency})
+                  <option key={acc.id} value={acc.id}>
+                    ...{acc.id.slice(-8)} ({acc.currency})
                   </option>
                 ))}
               </select>

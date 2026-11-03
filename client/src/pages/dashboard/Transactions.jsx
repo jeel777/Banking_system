@@ -14,7 +14,7 @@ export default function Transactions() {
     accounts.list().then(d => {
       const active = d.accounts.filter(a => a.status === 'active');
       setUserAccounts(active);
-      if (active.length > 0) setStatementAccount(active[0]._id);
+      if (active.length > 0) setStatementAccount(active[0].id);
     });
   }, []);
 
@@ -76,7 +76,7 @@ export default function Transactions() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <select className="form-select" style={{ width: 180 }} value={statementAccount} onChange={e => setStatementAccount(e.target.value)}>
             {userAccounts.map(acc => (
-              <option key={acc._id} value={acc._id}>...{acc._id.slice(-8)} ({acc.currency})</option>
+              <option key={acc.id} value={acc.id}>...{acc.id.slice(-8)} ({acc.currency})</option>
             ))}
           </select>
           <button
@@ -117,14 +117,14 @@ export default function Transactions() {
               </thead>
               <tbody>
                 {txList.map(tx => (
-                  <tr key={tx._id}>
+                  <tr key={tx.id}>
                     <td>{new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ fontWeight: 600 }}>₹{tx.amount?.toLocaleString('en-IN')}</td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      ...{(tx.fromAccount?._id || tx.fromAccount || '').slice(-6)}
+                      ...{(tx.fromAccount?.id || tx.fromAccount || '').slice(-6)}
                     </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      ...{(tx.toAccount?._id || tx.toAccount || '').slice(-6)}
+                      ...{(tx.toAccount?.id || tx.toAccount || '').slice(-6)}
                     </td>
                     <td>
                       <span className={`badge ${tx.status === 'completed' ? 'badge-success' : tx.status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>

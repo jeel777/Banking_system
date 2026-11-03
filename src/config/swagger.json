@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Banking System API",
-    "description": "Enterprise-grade REST API for a banking system with ACID transactions, double-entry ledger, AI-powered fraud detection (Gemini), and admin management. Built with Express 5, MongoDB, and Zod validation.",
+    "description": "Enterprise-grade REST API for a banking system with ACID transactions, double-entry ledger, AI-powered fraud detection (Gemini), and admin management. Built with Express 5, PostgreSQL, Prisma, and Zod validation.",
     "version": "1.0.0",
     "contact": {
       "name": "Jeel Delvadiya"
@@ -250,7 +250,7 @@
       "post": {
         "tags": ["Transactions"],
         "summary": "Create a new transfer (with AI fraud detection)",
-        "description": "Transfers funds between two accounts. Each transaction passes through a 7-rule fraud detection engine + Gemini AI analysis before execution. Uses MongoDB ACID sessions and double-entry ledger for data integrity.",
+        "description": "Transfers funds between two accounts. Each transaction passes through a 7-rule fraud detection engine + Gemini AI analysis before execution. Uses PostgreSQL ACID transactions and a double-entry ledger for data integrity.",
         "security": [{ "cookieAuth": [] }],
         "requestBody": {
           "required": true,

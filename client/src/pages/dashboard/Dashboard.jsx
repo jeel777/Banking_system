@@ -23,9 +23,9 @@ export default function Dashboard() {
       const bals = {};
       for (const acc of accData.accounts) {
         try {
-          const b = await accounts.balance(acc._id);
-          bals[acc._id] = b.balance;
-        } catch { bals[acc._id] = 0; }
+          const b = await accounts.balance(acc.id);
+          bals[acc.id] = b.balance;
+        } catch { bals[acc.id] = 0; }
       }
       setBalances(bals);
     } catch (err) {
@@ -89,7 +89,7 @@ export default function Dashboard() {
       ) : (
         <div className="stats-grid" style={{ marginBottom: 32 }}>
           {userAccounts.map(acc => (
-            <div className="card" key={acc._id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="card" key={acc.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className={`badge ${acc.status === 'active' ? 'badge-success' : acc.status === 'frozen' ? 'badge-danger' : 'badge-warning'}`}>
                   {acc.status}
@@ -97,10 +97,10 @@ export default function Dashboard() {
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{acc.currency}</span>
               </div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent)' }}>
-                ₹{(balances[acc._id] || 0).toLocaleString('en-IN')}
+                ₹{(balances[acc.id] || 0).toLocaleString('en-IN')}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
-                ID: {acc._id}
+                ID: {acc.id}
               </div>
             </div>
           ))}
@@ -128,11 +128,11 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {recentTx.map(tx => (
-                <tr key={tx._id}>
+                <tr key={tx.id}>
                   <td>{new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
                   <td style={{ fontWeight: 600 }}>₹{tx.amount?.toLocaleString('en-IN')}</td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{tx.fromAccount?._id?.slice(-6) || tx.fromAccount?.slice(-6) || '—'}</td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{tx.toAccount?._id?.slice(-6) || tx.toAccount?.slice(-6) || '—'}</td>
+                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{tx.fromAccount?.id?.slice(-6) || tx.fromAccount?.slice(-6) || '—'}</td>
+                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{tx.toAccount?.id?.slice(-6) || tx.toAccount?.slice(-6) || '—'}</td>
                   <td>
                     <span className={`badge ${tx.status === 'completed' ? 'badge-success' : tx.status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>
                       {tx.status}

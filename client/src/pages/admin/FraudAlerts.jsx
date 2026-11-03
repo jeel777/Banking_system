@@ -93,7 +93,7 @@ export default function FraudAlerts() {
               </thead>
               <tbody>
                 {alerts.map(alert => (
-                  <tr key={alert._id}>
+                  <tr key={alert.id}>
                     <td>{new Date(alert.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ fontWeight: 600 }}>₹{alert.amount?.toLocaleString('en-IN')}</td>
                     <td>
@@ -107,7 +107,7 @@ export default function FraudAlerts() {
                       {alert.triggeredRules?.length || 0} rules
                     </td>
                     <td>
-                      <button className="btn btn-outline btn-sm" onClick={() => navigate(`/admin/fraud-alerts/${alert._id}`)}>
+                      <button className="btn btn-outline btn-sm" onClick={() => navigate(`/admin/fraud-alerts/${alert.id}`)}>
                         View
                       </button>
                     </td>

@@ -6,12 +6,15 @@ WORKDIR /app
 # Copy package files first for layer caching
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Prisma CLI is a dev dependency and is needed to generate the client.
+RUN npm ci
 
 # Copy Prisma schema and generate client
 COPY prisma ./prisma/
 RUN npx prisma generate
+
+# Remove build-only dependencies from the runtime image.
+RUN npm prune --omit=dev
 
 # Copy source code
 COPY . .

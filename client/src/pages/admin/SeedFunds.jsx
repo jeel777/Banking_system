@@ -76,8 +76,8 @@ export default function SeedFunds() {
                 {allAccounts
                   .filter(a => a.user?.role !== 'system')
                   .map(acc => (
-                    <option key={acc._id} value={acc._id}>
-                      {acc.user?.name} ({acc.user?.email}) — ...{acc._id.slice(-6)} — ₹{acc.balance?.toLocaleString('en-IN')} [{acc.status}]
+                    <option key={acc.id} value={acc.id}>
+                      {acc.user?.name} ({acc.user?.email}) — ...{acc.id.slice(-6)} — ₹{acc.balance?.toLocaleString('en-IN')} [{acc.status}]
                     </option>
                   ))}
               </select>
@@ -121,7 +121,7 @@ export default function SeedFunds() {
           </thead>
           <tbody>
             {allAccounts.map(acc => (
-              <tr key={acc._id}>
+              <tr key={acc.id}>
                 <td style={{ fontWeight: 600 }}>{acc.user?.name || '—'}</td>
                 <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{acc.user?.email || '—'}</td>
                 <td>
@@ -130,7 +130,7 @@ export default function SeedFunds() {
                   </span>
                 </td>
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  ...{acc._id.slice(-8)}
+                  ...{acc.id.slice(-8)}
                 </td>
                 <td style={{ fontWeight: 700, color: acc.balance > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                   ₹{acc.balance?.toLocaleString('en-IN')}
