@@ -58,6 +58,7 @@ app.use(requestLogger);
 // Rate Limiting 
 app.use('/api', globalLimiter);                             // 100 requests per 15 min per IP
 
+
 //  API Documentation    
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
     customCss: '.swagger-ui .topbar { display: none }',
@@ -69,6 +70,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/admin", adminRoutes);
+
 
 //  Health Check 
 app.get("/api/health", (req, res) => {

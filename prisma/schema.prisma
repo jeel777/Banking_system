@@ -82,6 +82,7 @@ model Transaction {
 
 enum TransactionStatus {
   pending
+  pending_review    // held by fraud system, waiting for admin review
   completed
   failed
   reversed
@@ -125,6 +126,12 @@ model FraudAlert {
   reviewNotes    String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+
+  // AI Agent review fields
+  autoReviewed    Boolean   @default(false)     // was this auto-reviewed by AI agent?
+  agentConfidence Int?                          // agent's confidence 0-100
+  agentReasoning  String?                       // agent's detailed reasoning
+  resolvedAt      DateTime?                     // when was this resolved (auto or manual)
 
   transaction Transaction? @relation(fields: [transactionId], references: [id])
   fromAccount Account      @relation("FraudFrom", fields: [fromAccountId], references: [id])

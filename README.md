@@ -325,8 +325,3 @@ This project is licensed under the ISC License.
 
 ---
 
-<div align="center">
-
-**Built with ❤️ by Jeel Delvadiya**
-
-</div>

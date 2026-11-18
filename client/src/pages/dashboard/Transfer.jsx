@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { accounts, transactions } from '../../api/client';
 
 export default function Transfer() {
@@ -9,6 +9,7 @@ export default function Transfer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const keyRef = useRef(null);
 
   useEffect(() => {
     accounts.list().then(d => {
@@ -21,13 +22,15 @@ export default function Transfer() {
     setError('');
     setResult(null);
     setLoading(true);
+    if (!keyRef.current) keyRef.current = crypto.randomUUID();
     try {
       const data = await transactions.create({
         fromAccount,
         toAccount,
         amount: parseFloat(amount),
-        idempotencyKey: crypto.randomUUID()
+        idempotencyKey: keyRef.current
       });
+      keyRef.current = null;
       setResult(data);
       setAmount('');
       setToAccount('');
